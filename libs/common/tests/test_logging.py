@@ -54,6 +54,16 @@ def test_format_includes_extra_fields() -> None:
     assert payload["attempt"] == 2
 
 
+def test_explicit_request_id_extra_overrides_context_default() -> None:
+    # Regression: middleware logs its access line after resetting the contextvar and
+    # passes request_id explicitly; the formatter must not clobber it with None.
+    formatter = JsonFormatter(component="api")
+
+    payload = json.loads(formatter.format(make_record("request handled", request_id="req-9")))
+
+    assert payload["request_id"] == "req-9"
+
+
 def test_format_serializes_exceptions() -> None:
     formatter = JsonFormatter(component="api")
     try:
