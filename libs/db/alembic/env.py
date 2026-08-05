@@ -15,11 +15,14 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    # Explicit programmatic config wins over the environment: callers that build an
+    # Alembic Config with set_main_option("sqlalchemy.url", ...) must get exactly that
+    # database even when DATABASE_URL is also set (e.g. scratch DBs in tests).
+    url = config.get_main_option("sqlalchemy.url") or os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError(
-            "DATABASE_URL is not set. Export it (or put it in .env and load it) before "
-            "running migrations — see .env.example at the repo root."
+            "No database URL: set sqlalchemy.url programmatically or export DATABASE_URL "
+            "(see .env.example at the repo root)."
         )
     return url
 
