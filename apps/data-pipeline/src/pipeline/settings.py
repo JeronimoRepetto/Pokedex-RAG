@@ -13,3 +13,8 @@ class PipelineSettings(BaseAppSettings):
     )
 
     database_url: str
+    data_dir: str = "data"
+    pokeapi_base_url: str = "https://pokeapi.co/api/v2"
+    pokeapi_rate_limit_per_sec: float = 3.0
+    http_timeout_seconds: float = 30.0
+    http_max_attempts: int = 4
