@@ -136,24 +136,34 @@ def normalize_pokemon(session: Session, payload: dict[str, Any]) -> None:
         )
     )
 
+    # Phase 1 — referenced-entity stubs, flushed BEFORE any child row references them.
+    # Interleaving session.get() queries with pending child inserts lets query-invoked
+    # autoflush write a child row before its stub exists: ForeignKeyViolation on
+    # PostgreSQL (invisible on SQLite, which doesn't enforce FKs). Live-ingest bug,
+    # 2026-08-05; regression test in tests/test_normalize_integration.py.
+    type_ids = {
+        entry["slot"]: _stub_type(session, entry["type"]) for entry in payload.get("types", [])
+    }
+    ability_entries = [
+        (entry["slot"], _stub_ability(session, entry["ability"]), entry.get("is_hidden", False))
+        for entry in payload.get("abilities", [])
+    ]
+    move_ids = {
+        entry["move"]["name"]: _stub_move(session, entry["move"])
+        for entry in payload.get("moves", [])
+    }
+    session.flush()
+
+    # Phase 2 — replace child collections wholesale.
     session.execute(delete(PokemonType).where(PokemonType.pokemon_id == pokemon_id))
-    for entry in payload.get("types", []):
-        session.add(
-            PokemonType(
-                pokemon_id=pokemon_id,
-                slot=entry["slot"],
-                type_id=_stub_type(session, entry["type"]),
-            )
-        )
+    for slot, type_id in type_ids.items():
+        session.add(PokemonType(pokemon_id=pokemon_id, slot=slot, type_id=type_id))
 
     session.execute(delete(PokemonAbility).where(PokemonAbility.pokemon_id == pokemon_id))
-    for entry in payload.get("abilities", []):
+    for slot, ability_id, is_hidden in ability_entries:
         session.add(
             PokemonAbility(
-                pokemon_id=pokemon_id,
-                slot=entry["slot"],
-                ability_id=_stub_ability(session, entry["ability"]),
-                is_hidden=entry.get("is_hidden", False),
+                pokemon_id=pokemon_id, slot=slot, ability_id=ability_id, is_hidden=is_hidden
             )
         )
 
@@ -171,7 +181,7 @@ def normalize_pokemon(session: Session, payload: dict[str, Any]) -> None:
     session.execute(delete(PokemonMove).where(PokemonMove.pokemon_id == pokemon_id))
     learned: set[tuple[int, str, int]] = set()
     for entry in payload.get("moves", []):
-        move_id = _stub_move(session, entry["move"])
+        move_id = move_ids[entry["move"]["name"]]
         for detail in entry.get("version_group_details", []):
             key = (move_id, detail["move_learn_method"]["name"], detail["level_learned_at"])
             if key in learned:
@@ -210,6 +220,12 @@ def _upsert_sprites(session: Session, pokemon_id: int, sprites: dict[str, Any]) 
 
 
 def normalize_evolution_chain(session: Session, payload: dict[str, Any]) -> None:
+    """Insert evolution edges for one chain.
+
+    Edges touching species that are not ingested (e.g. a Gen-2 evolution of a Gen-1
+    Pokémon, like golbat→crobat) are skipped with a warning — explicit, logged
+    degradation while the project only ingests Gen 1.
+    """
     chain_id = payload["id"]
     session.execute(delete(Evolution).where(Evolution.chain_id == chain_id))
 
@@ -217,6 +233,13 @@ def normalize_evolution_chain(session: Session, payload: dict[str, Any]) -> None
         from_id = extract_id(node["species"]["url"])
         for child in node.get("evolves_to", []):
             to_id = extract_id(child["species"]["url"])
+            if session.get(Species, from_id) is None or session.get(Species, to_id) is None:
+                logger.warning(
+                    "evolution edge skipped: species not ingested",
+                    extra={"chain_id": chain_id, "from": from_id, "to": to_id},
+                )
+                walk(child)
+                continue
             details = child.get("evolution_details", [])
             first = details[0] if details else {}
             session.add(
@@ -246,6 +269,7 @@ def normalize_move(session: Session, payload: dict[str, Any]) -> None:
     type_id = extract_id(payload["type"]["url"]) if payload.get("type") else None
     if type_id is not None and session.get(Type, type_id) is None:
         session.add(Type(id=type_id, name=payload["type"]["name"]))
+        session.flush()  # the move row references it (see normalize_pokemon phase note)
     session.merge(
         Move(
             id=payload["id"],
