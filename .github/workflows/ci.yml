@@ -13,6 +13,7 @@ jobs:
       matrix:
         component:
           - libs/common
+          - libs/db
     defaults:
       run:
         working-directory: ${{ matrix.component }}
