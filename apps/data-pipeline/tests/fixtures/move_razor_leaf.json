@@ -1,0 +1,16 @@
+{
+  "id": 75,
+  "name": "razor-leaf",
+  "power": 55,
+  "accuracy": 95,
+  "pp": 25,
+  "type": { "name": "grass", "url": "https://pokeapi.co/api/v2/type/12/" },
+  "damage_class": { "name": "physical", "url": "https://pokeapi.co/api/v2/move-damage-class/2/" },
+  "effect_entries": [
+    {
+      "effect": "Inflicts regular damage. User's critical hit rate is one level higher when using this move.",
+      "short_effect": "Has an increased chance for a critical hit.",
+      "language": { "name": "en", "url": "https://pokeapi.co/api/v2/language/9/" }
+    }
+  ]
+}
