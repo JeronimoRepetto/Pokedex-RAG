@@ -15,6 +15,7 @@ jobs:
           - libs/common
           - libs/db
           - libs/embeddings
+          - libs/llm-gateway
           - apps/data-pipeline
           - apps/api
     defaults:
