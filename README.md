@@ -11,8 +11,13 @@ Retrieval-Augmented Generation over Gen-1 Pokémon data.
 ## Quickstart
 
 ```bash
-cp .env.example .env   # fill in your values
-docker compose up -d
+cp .env.example .env                     # fill in your values
+docker compose up -d db                  # PostgreSQL + pgvector
+docker compose run --rm migrate          # apply schema migrations
+cd apps/data-pipeline && poetry install
+poetry run pipeline ingest --generation 1   # fetch-once Gen-1 ingest (~10 min, throttled)
+poetry run pipeline sprites                 # download sprite files locally
+cd ../.. && docker compose up -d api       # http://localhost:8000/docs
 ```
 
 Each component's README covers how to run, test and deploy it.
