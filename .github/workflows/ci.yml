@@ -15,6 +15,7 @@ jobs:
           - libs/common
           - libs/db
           - apps/data-pipeline
+          - apps/api
     defaults:
       run:
         working-directory: ${{ matrix.component }}
@@ -41,6 +42,50 @@ jobs:
       - name: Unit tests
         run: poetry run pytest -q
 
-  # An `integration` job (pgvector service container, RUN_INTEGRATION=1, PRs only) is
-  # added in Phase 1 together with the first integration tests — an empty job would
-  # only produce a misleading green/red signal until then.
+  integration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - libs/db
+          - apps/data-pipeline
+          - apps/api
+    services:
+      db:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: pokedex
+          POSTGRES_PASSWORD: pokedex
+          POSTGRES_DB: pokedex
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pokedex -d pokedex"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RUN_INTEGRATION: "1"
+      DATABASE_URL: postgresql+psycopg://pokedex:pokedex@localhost:5432/pokedex
+    defaults:
+      run:
+        working-directory: ${{ matrix.component }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pipx install poetry==2.4.1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: poetry
+          cache-dependency-path: ${{ matrix.component }}/poetry.lock
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Tests (unit + integration)
+        run: poetry run pytest -q
