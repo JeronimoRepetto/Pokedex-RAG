@@ -68,6 +68,42 @@ def ingest(
         )
 
 
+@app.command("build-docs")
+def build_docs() -> None:
+    """Build deterministic RAG documents from the ingested domain rows."""
+    from sqlalchemy import select
+
+    from pipeline.documents import DocumentBuilder
+    from pokedex_db.models import Pokemon
+
+    settings = bootstrap()
+    engine = create_db_engine(settings.database_url)
+    session_factory = create_session_factory(engine)
+    created = updated = unchanged = 0
+    with session_factory() as session:
+        pokemon_ids = session.scalars(select(Pokemon.id).order_by(Pokemon.id)).all()
+        builder = DocumentBuilder(session)
+        for pokemon_id in pokemon_ids:
+            c, u, n = builder.upsert(builder.build_for_pokemon(pokemon_id))
+            created += c
+            updated += u
+            unchanged += n
+        session.commit()
+    # "created" is a reserved LogRecord attribute — extra keys must not collide with it
+    logger.info(
+        "build-docs finished",
+        extra={
+            "pokemon": len(pokemon_ids),
+            "docs_created": created,
+            "docs_updated": updated,
+            "docs_unchanged": unchanged,
+        },
+    )
+    typer.echo(
+        f"pokemon={len(pokemon_ids)} created={created} updated={updated} unchanged={unchanged}"
+    )
+
+
 @app.command()
 def sprites() -> None:
     """Download sprite files referenced by the manifest (idempotent)."""
