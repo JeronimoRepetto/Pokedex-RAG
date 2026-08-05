@@ -8,6 +8,8 @@ dependencies = [
     "uvicorn[standard] (>=0.30,<1.0)",
     "pokedex-common",
     "pokedex-db",
+    "pokedex-embeddings @ file:///C:/Users/jeron/Desktop/Pokedex-RAG/libs/embeddings",
+    "python-multipart (>=0.0.32,<0.0.33)",
 ]
 
 [tool.poetry]
@@ -16,6 +18,7 @@ packages = [{ include = "api", from = "src" }]
 [tool.poetry.dependencies]
 pokedex-common = { path = "../../libs/common", develop = true }
 pokedex-db = { path = "../../libs/db", develop = true }
+pokedex-embeddings = {develop = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0,<9.0"

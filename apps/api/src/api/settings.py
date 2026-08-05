@@ -11,3 +11,10 @@ class ApiSettings(BaseAppSettings):
     )
 
     database_url: str
+
+    # Embeddings (live-verified values in ADR-0002; used by /search endpoints)
+    gcp_project_id: str = ""
+    embedding_model: str = ""
+    embedding_location: str = ""
+    embedding_dimensions: int = 768
+    embedding_space_label: str = ""
