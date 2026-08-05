@@ -110,7 +110,8 @@ def test_build_docs_cli_runs_end_to_end(tmp_path, monkeypatch) -> None:
     result = CliRunner().invoke(app, ["build-docs"])
 
     assert result.exit_code == 0, result.output
-    assert "created=4" in result.output
+    # card + flavor + moves; no evolution doc because no chain was seeded here
+    assert "created=3" in result.output
 
 
 def test_upsert_converges_and_detects_changes(session) -> None:
