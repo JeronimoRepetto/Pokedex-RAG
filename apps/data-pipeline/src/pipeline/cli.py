@@ -105,6 +105,40 @@ def build_docs() -> None:
 
 
 @app.command()
+def embed() -> None:
+    """Embed documents into the configured space (idempotent by content hash)."""
+    from pipeline.embedjob import embed_documents
+    from pokedex_embeddings import GeminiEmbedder, SpaceConfig
+
+    settings = bootstrap()
+    for field in (
+        "gcp_project_id",
+        "embedding_model",
+        "embedding_location",
+        "embedding_space_label",
+    ):
+        if not getattr(settings, field):
+            raise typer.BadParameter(
+                f"{field.upper()} is not configured — see .env.example (embeddings section)."
+            )
+    engine = create_db_engine(settings.database_url)
+    session_factory = create_session_factory(engine)
+    embedder = GeminiEmbedder(
+        project=settings.gcp_project_id,
+        location=settings.embedding_location,
+        model=settings.embedding_model,
+        dimensions=settings.embedding_dimensions,
+    )
+    space = SpaceConfig(
+        label=settings.embedding_space_label,
+        model_name=settings.embedding_model,
+        dimensions=settings.embedding_dimensions,
+    )
+    report = embed_documents(session_factory, embedder, space)
+    typer.echo(f"embedded={report.embedded} skipped={report.skipped}")
+
+
+@app.command()
 def sprites() -> None:
     """Download sprite files referenced by the manifest (idempotent)."""
     from pipeline.sprites import SpriteDownloader
