@@ -1,0 +1,28 @@
+{
+  "id": 1,
+  "name": "bulbasaur",
+  "capture_rate": 45,
+  "is_legendary": false,
+  "is_mythical": false,
+  "color": { "name": "green", "url": "https://pokeapi.co/api/v2/pokemon-color/5/" },
+  "habitat": { "name": "grassland", "url": "https://pokeapi.co/api/v2/pokemon-habitat/3/" },
+  "generation": { "name": "generation-i", "url": "https://pokeapi.co/api/v2/generation/1/" },
+  "evolution_chain": { "url": "https://pokeapi.co/api/v2/evolution-chain/1/" },
+  "flavor_text_entries": [
+    {
+      "flavor_text": "A strange seed was\nplanted on its\nback at birth.",
+      "language": { "name": "en", "url": "https://pokeapi.co/api/v2/language/9/" },
+      "version": { "name": "red", "url": "https://pokeapi.co/api/v2/version/1/" }
+    },
+    {
+      "flavor_text": "Una rara semilla fue\nplantada en su lomo.",
+      "language": { "name": "es", "url": "https://pokeapi.co/api/v2/language/7/" },
+      "version": { "name": "red", "url": "https://pokeapi.co/api/v2/version/1/" }
+    },
+    {
+      "flavor_text": "A strange seed was\nplanted on its\nback at birth.",
+      "language": { "name": "en", "url": "https://pokeapi.co/api/v2/language/9/" },
+      "version": { "name": "blue", "url": "https://pokeapi.co/api/v2/version/2/" }
+    }
+  ]
+}
