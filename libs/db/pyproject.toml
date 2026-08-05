@@ -1,0 +1,28 @@
+[project]
+name = "pokedex-db"
+version = "0.1.0"
+description = "SQLAlchemy models, engine/session factories and Alembic migrations (single lineage)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "sqlalchemy (>=2.0,<3.0)",
+    "alembic (>=1.13,<2.0)",
+    "psycopg[binary] (>=3.1,<4.0)",
+]
+
+[tool.poetry]
+packages = [{ include = "pokedex_db", from = "src" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0,<9.0"
+ruff = ">=0.8,<1.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: needs real services (opt-in via RUN_INTEGRATION=1)",
+    "live: needs real credentials, never run in CI",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
