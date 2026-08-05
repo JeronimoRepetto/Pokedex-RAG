@@ -67,7 +67,28 @@ def test_upgrade_head_creates_schema_and_downgrade_removes_it(migrated_url: str)
         "evolutions",
         "flavor_texts",
         "sprites",
+        "embedding_spaces",
+        "documents",
+        "embeddings",
     } <= tables
+
+    with engine.connect() as conn:
+        # ADR-0002 space is seeded and the partial HNSW index exists for it
+        space = conn.execute(
+            text(
+                "SELECT id, model_name, dimensions FROM embedding_spaces WHERE label = "
+                "'gemini-embedding-2-768-v1'"
+            )
+        ).one()
+        assert space.model_name == "gemini-embedding-2"
+        assert space.dimensions == 768
+        index_def = conn.execute(
+            text("SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_embeddings_hnsw_space_1'")
+        ).scalar_one()
+        assert "hnsw" in index_def and "space_id = 1" in index_def
+        # generated tsvector column populates itself
+        document_columns = {c["name"] for c in inspector.get_columns("documents")}
+        assert "content_tsv" in document_columns
     unique_names = {c["name"] for c in inspector.get_unique_constraints("raw_snapshots")}
     assert "uq_raw_snapshots_resource" in unique_names
     columns = {c["name"] for c in inspector.get_columns("raw_snapshots")}

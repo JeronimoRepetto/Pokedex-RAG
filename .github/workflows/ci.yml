@@ -14,6 +14,7 @@ jobs:
         component:
           - libs/common
           - libs/db
+          - libs/embeddings
           - apps/data-pipeline
           - apps/api
     defaults:
