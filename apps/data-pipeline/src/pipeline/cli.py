@@ -105,9 +105,11 @@ def build_docs() -> None:
 
 
 @app.command()
-def embed() -> None:
-    """Embed documents into the configured space (idempotent by content hash)."""
-    from pipeline.embedjob import embed_documents
+def embed(
+    sprites: bool = typer.Option(False, "--sprites", help="Also embed downloaded sprite images"),
+) -> None:
+    """Embed documents (and optionally sprites) into the configured space."""
+    from pipeline.embedjob import embed_documents, embed_sprites
     from pokedex_embeddings import GeminiEmbedder, SpaceConfig
 
     settings = bootstrap()
@@ -135,7 +137,15 @@ def embed() -> None:
         dimensions=settings.embedding_dimensions,
     )
     report = embed_documents(session_factory, embedder, space)
-    typer.echo(f"embedded={report.embedded} skipped={report.skipped}")
+    typer.echo(f"documents: embedded={report.embedded} skipped={report.skipped}")
+    if sprites:
+        sprite_report = embed_sprites(session_factory, embedder, space, settings.data_dir)
+        typer.echo(
+            f"sprites: embedded={sprite_report.embedded} skipped={sprite_report.skipped} "
+            f"failed={len(sprite_report.failed)}"
+        )
+        if sprite_report.failed:
+            raise typer.Exit(code=1)
 
 
 @app.command()

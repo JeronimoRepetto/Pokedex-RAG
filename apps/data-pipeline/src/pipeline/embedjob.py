@@ -118,9 +118,7 @@ def embed_sprites(
             )
         }
         sprites = session.scalars(select(Sprite).order_by(Sprite.id)).all()
-        logger.info(
-            "embed sprites starting", extra={"total": len(sprites), "space_id": space_id}
-        )
+        logger.info("embed sprites starting", extra={"total": len(sprites), "space_id": space_id})
 
         since_commit = 0
         for index, sprite in enumerate(sprites, start=1):
@@ -156,9 +154,7 @@ def embed_sprites(
             if since_commit >= commit_every:
                 session.commit()
                 since_commit = 0
-                logger.info(
-                    "embed sprites progress", extra={"done": index, "total": len(sprites)}
-                )
+                logger.info("embed sprites progress", extra={"done": index, "total": len(sprites)})
         session.commit()
     if report.failed:
         logger.warning(
