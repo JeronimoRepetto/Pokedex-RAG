@@ -32,8 +32,10 @@ class JsonFormatter(logging.Formatter):
             "component": self.component,
             "request_id": get_request_id(),
         }
+        # Explicit extras override the context defaults (e.g. middleware logging a
+        # request_id after the contextvar was already reset).
         for key, value in record.__dict__.items():
-            if key not in _RECORD_BUILTIN_ATTRS and key not in payload:
+            if key not in _RECORD_BUILTIN_ATTRS:
                 payload[key] = value
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)

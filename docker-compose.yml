@@ -18,6 +18,21 @@ services:
       timeout: 5s
       retries: 10
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: pokedex-api:local
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pokedex}:${POSTGRES_PASSWORD:-pokedex}@db:5432/${POSTGRES_DB:-pokedex}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    depends_on:
+      db:
+        condition: service_healthy
+
   # One-shot migration job (same image as the data pipeline). Not started by default:
   #   docker compose run --rm migrate
   migrate:
