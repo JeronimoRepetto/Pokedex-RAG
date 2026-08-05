@@ -1,0 +1,31 @@
+# --- local-only: never pushed to GitHub (docs privacy policy) ---
+docs/
+CLAUDE.md
+.claude/
+.codegraph/
+
+# --- data & secrets ---
+data/
+.env
+.env.*
+!.env.example
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- os / editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
