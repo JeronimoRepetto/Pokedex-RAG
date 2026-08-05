@@ -35,6 +35,8 @@ class SearchRepositoryProtocol(Protocol):
 
     def lexical_search(self, query: str, limit: int) -> list[SearchHit]: ...
 
+    def sprite_search(self, query_vector: list[float], limit: int) -> list[SearchHit]: ...
+
 
 class SqlSearchRepository:
     def __init__(self, session_factory: sessionmaker[Session], space: SpaceConfig) -> None:
@@ -91,6 +93,46 @@ class SqlSearchRepository:
             rows = session.execute(sql, {"query": query, "limit": limit}).all()
         return [SearchHit(*row) for row in rows]
 
+    def sprite_search(self, query_vector: list[float], limit: int) -> list[SearchHit]:
+        """Image-to-image search over sprite vectors; hits point at the Pokémon."""
+        from pokedex_db.models import Sprite
+
+        with self._session_factory() as session:
+            space_id = self.space_id(session)
+            distance = Embedding.embedding.cosine_distance(query_vector)
+            rows = session.execute(
+                Sprite.__table__.select()
+                .with_only_columns(
+                    Sprite.id,
+                    Sprite.pokemon_id,
+                    Pokemon.name,
+                    Sprite.kind,
+                    (1 - distance).label("score"),
+                )
+                .select_from(
+                    Embedding.__table__.join(
+                        Sprite.__table__, Embedding.object_id == Sprite.id
+                    ).join(Pokemon.__table__, Sprite.pokemon_id == Pokemon.id)
+                )
+                .where(
+                    Embedding.space_id == space_id,
+                    Embedding.object_type == "sprite",
+                )
+                .order_by(distance)
+                .limit(limit)
+            ).all()
+        return [
+            SearchHit(
+                document_id=sprite_id,
+                pokemon_id=pokemon_id,
+                pokemon_name=name,
+                doc_type="sprite",
+                title=f"{name} — {kind} sprite",
+                score=score,
+            )
+            for sprite_id, pokemon_id, name, kind, score in rows
+        ]
+
 
 class SearchService:
     def __init__(self, repository: SearchRepositoryProtocol, embedder_factory) -> None:
@@ -117,7 +159,7 @@ class SearchService:
 
     def search_image(self, data: bytes, mime_type: str, limit: int) -> list[SearchHit]:
         query_vector = self._embedder_instance().embed_image(data, mime_type)
-        return self._repository.vector_search(query_vector, limit)
+        return self._repository.sprite_search(query_vector, limit)
 
     @staticmethod
     def _fuse(

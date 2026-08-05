@@ -34,10 +34,21 @@ OTHER_HIT = SearchHit(
 )
 
 
+SPRITE_HIT = SearchHit(
+    document_id=42,
+    pokemon_id=6,
+    pokemon_name="charizard",
+    doc_type="sprite",
+    title="charizard — default sprite",
+    score=0.99,
+)
+
+
 class FakeSearchRepository:
     def __init__(self) -> None:
         self.vector_calls: list[int] = []
         self.lexical_calls: list[str] = []
+        self.sprite_calls: list[int] = []
 
     def vector_search(self, query_vector, limit):
         self.vector_calls.append(len(query_vector))
@@ -47,6 +58,10 @@ class FakeSearchRepository:
         self.lexical_calls.append(query)
         return [OTHER_HIT, CARD_HIT][:limit]
 
+    def sprite_search(self, query_vector, limit):
+        self.sprite_calls.append(len(query_vector))
+        return [SPRITE_HIT][:limit]
+
 
 class BrokenSpaceRepository:
     def vector_search(self, query_vector, limit):
@@ -54,6 +69,9 @@ class BrokenSpaceRepository:
 
     def lexical_search(self, query, limit):
         return []
+
+    def sprite_search(self, query_vector, limit):
+        raise SpaceMismatchError("space 'x' is not registered — run pipeline db upgrade")
 
 
 @pytest.fixture
@@ -117,7 +135,7 @@ def test_space_mismatch_maps_to_503(tmp_path) -> None:
     assert "db upgrade" in response.json()["detail"]
 
 
-def test_image_search_accepts_png_and_returns_hits(client_and_repo) -> None:
+def test_image_search_matches_against_sprite_vectors(client_and_repo) -> None:
     client, repository = client_and_repo
 
     response = client.post(
@@ -125,8 +143,12 @@ def test_image_search_accepts_png_and_returns_hits(client_and_repo) -> None:
     )
 
     assert response.status_code == 200
-    assert repository.vector_calls == [8]
-    assert response.json()["mode"] == "image"
+    assert repository.sprite_calls == [8]  # image->image, not image->document
+    assert repository.vector_calls == []
+    body = response.json()
+    assert body["mode"] == "image"
+    assert body["results"][0]["pokemon_name"] == "charizard"
+    assert body["results"][0]["doc_type"] == "sprite"
 
 
 def test_image_search_rejects_wrong_type_and_empty_file(client_and_repo) -> None:
