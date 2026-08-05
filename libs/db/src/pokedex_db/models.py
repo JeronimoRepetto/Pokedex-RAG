@@ -9,6 +9,7 @@ decimetres, weight in hectograms.
 from datetime import datetime
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -26,6 +27,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 BigIntPK = BigInteger().with_variant(Integer(), "sqlite")
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
+
+# Embedding column width. Changing it means a NEW space, a new table/partition and a new
+# migration — never a silent edit (see embedding_spaces + startup verification).
+VECTOR_DIMENSIONS = 768
+# pgvector's Vector only compiles on PostgreSQL; SQLite unit tests store a JSON list.
+VectorVariant = Vector(VECTOR_DIMENSIONS).with_variant(JSON(), "sqlite")
 
 
 class Base(DeclarativeBase):
@@ -175,6 +182,63 @@ class FlavorText(Base):
     version: Mapped[str] = mapped_column(String(50))
     language: Mapped[str] = mapped_column(String(20))
     text: Mapped[str] = mapped_column(Text)
+
+
+class EmbeddingSpace(Base):
+    """One vector space = one embedding model at one dimensionality.
+
+    Every embedding row is FK-bound to a space, every query filters by space, and each
+    component verifies at startup that its configured space matches this row — so
+    vectors from different models can never be compared (ADR-0002 layering).
+    """
+
+    __tablename__ = "embedding_spaces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    label: Mapped[str] = mapped_column(String(100), unique=True)  # e.g. gemini-embedding-2-768-v1
+    model_name: Mapped[str] = mapped_column(String(100))
+    dimensions: Mapped[int] = mapped_column(Integer)
+    modality: Mapped[str] = mapped_column(String(30))  # text | multimodal
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Document(Base):
+    """Deterministically-built RAG document for one Pokémon (card/flavor/moves/evolution).
+
+    `content_hash` lets the embed job skip unchanged content. A PostgreSQL-only
+    generated tsvector column (`content_tsv`, migration 0003) backs lexical search and
+    is intentionally unmapped here so SQLite unit tests keep working.
+    """
+
+    __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint("pokemon_id", "doc_type", name="uq_documents_pokemon_doctype"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    doc_type: Mapped[str] = mapped_column(String(30))  # card | flavor | moves | evolution
+    pokemon_id: Mapped[int] = mapped_column(ForeignKey("pokemon.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    content: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    source_refs: Mapped[dict[str, Any]] = mapped_column(JSONVariant, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Embedding(Base):
+    __tablename__ = "embeddings"
+    __table_args__ = (
+        UniqueConstraint("space_id", "object_type", "object_id", name="uq_embeddings_object"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    space_id: Mapped[int] = mapped_column(ForeignKey("embedding_spaces.id"), index=True)
+    object_type: Mapped[str] = mapped_column(String(20))  # document | sprite
+    object_id: Mapped[int] = mapped_column(BigInteger)
+    embedding: Mapped[list[float]] = mapped_column(VectorVariant)
+    content_hash: Mapped[str] = mapped_column(String(64))  # hash of the embedded content
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Sprite(Base):
