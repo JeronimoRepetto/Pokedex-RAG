@@ -91,6 +91,28 @@ def test_builds_are_deterministic(session) -> None:
     assert first == second
 
 
+def test_build_docs_cli_runs_end_to_end(tmp_path, monkeypatch) -> None:
+    """Regression: logging `extra` with the reserved key 'created' crashed the command."""
+    from typer.testing import CliRunner
+
+    from pipeline.cli import app
+
+    url = f"sqlite+pysqlite:///{tmp_path}/docs.db"
+    engine = create_db_engine(url)
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    with factory() as seeding_session:
+        normalize_species(seeding_session, load("species_bulbasaur.json"))
+        normalize_pokemon(seeding_session, load("pokemon_bulbasaur.json"))
+        seeding_session.commit()
+    monkeypatch.setenv("DATABASE_URL", url)
+
+    result = CliRunner().invoke(app, ["build-docs"])
+
+    assert result.exit_code == 0, result.output
+    assert "created=4" in result.output
+
+
 def test_upsert_converges_and_detects_changes(session) -> None:
     builder = DocumentBuilder(session)
 

@@ -89,13 +89,14 @@ def build_docs() -> None:
             updated += u
             unchanged += n
         session.commit()
+    # "created" is a reserved LogRecord attribute — extra keys must not collide with it
     logger.info(
         "build-docs finished",
         extra={
             "pokemon": len(pokemon_ids),
-            "created": created,
-            "updated": updated,
-            "unchanged": unchanged,
+            "docs_created": created,
+            "docs_updated": updated,
+            "docs_unchanged": unchanged,
         },
     )
     typer.echo(
