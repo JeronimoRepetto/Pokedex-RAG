@@ -18,3 +18,7 @@ class ApiSettings(BaseAppSettings):
     embedding_location: str = ""
     embedding_dimensions: int = 768
     embedding_space_label: str = ""
+
+    # Generation (live-verified: gemini-3.6-flash serves from "global")
+    generation_model: str = ""
+    generation_location: str = ""
