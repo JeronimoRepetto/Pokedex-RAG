@@ -76,6 +76,36 @@ def test_ingest_builds_full_mini_universe(env) -> None:
         assert session.execute(select(func.count()).select_from(Evolution)).scalar_one() == 0
 
 
+def test_backfill_survives_a_broken_upstream_resource(env) -> None:
+    """Regression: PokéAPI served a persistent 502 for /move/436 (2026-08-05) and the
+    whole run died. Backfill failures must be reported and retried next run, not fatal."""
+    from pipeline.pokeapi import PokeApiError
+
+    session_factory, store = env
+    payloads = mini_universe()
+    broken_path = "/move/75"
+    del payloads[broken_path]
+
+    class FlakyClient(FakePokeApiClient):
+        def get_json(self, path: str):
+            if path == broken_path:
+                self.calls.append(path)
+                raise PokeApiError(f"Gave up on {path} after 4 attempts; last error: HTTP 502")
+            return super().get_json(path)
+
+    report = ingest_generation(FlakyClient(payloads), store, session_factory)
+
+    assert report.failed == [broken_path]
+    with session_factory() as session:
+        # stub row survives with name only; details arrive when a re-run succeeds
+        move = session.get(Move, 75)
+        assert move.name == "razor-leaf"
+        assert move.power is None
+        # everything else completed normally
+        assert session.get(Move, 33).power == 40
+        assert session.get(Pokemon, 1) is not None
+
+
 def test_second_run_fetches_nothing(env) -> None:
     session_factory, store = env
     first_client = FakePokeApiClient(mini_universe())

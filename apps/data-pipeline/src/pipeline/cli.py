@@ -61,6 +61,11 @@ def ingest(
     ) as client:
         report = ingest_generation(client, store, session_factory, generation=generation)
     typer.echo(f"fetched={report.fetched} reused={report.reused} normalized={report.normalized}")
+    if report.failed:
+        typer.echo(
+            f"WARNING: {len(report.failed)} backfill resource(s) failed and will be retried "
+            f"on the next run: {', '.join(report.failed)}"
+        )
 
 
 @app.command()

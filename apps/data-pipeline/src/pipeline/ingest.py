@@ -18,6 +18,7 @@ from pipeline.normalize import (
     normalize_species,
     normalize_type,
 )
+from pipeline.pokeapi import PokeApiError
 from pipeline.snapshots import SnapshotStore
 from pokedex_db.models import PokemonAbility, PokemonMove, PokemonType, Species
 
@@ -33,6 +34,7 @@ class IngestReport:
     fetched: int = 0
     reused: int = 0
     normalized: dict[str, int] = field(default_factory=dict)
+    failed: list[str] = field(default_factory=list)  # backfill paths that errored
 
     def bump(self, resource_type: str) -> None:
         self.normalized[resource_type] = self.normalized.get(resource_type, 0) + 1
@@ -106,7 +108,19 @@ def ingest_generation(
             ids = sorted(session.scalars(id_query).all())
         logger.info("backfill starting", extra={"resource_type": resource_type, "count": len(ids)})
         for index, resource_id in enumerate(ids, start=1):
-            payload = fetch_once(resource_type, str(resource_id), f"/{resource_type}/{resource_id}")
+            path = f"/{resource_type}/{resource_id}"
+            # Backfill enriches stub rows — a broken upstream resource (PokéAPI served a
+            # persistent 502 for /move/436 on 2026-08-05) must not kill the whole run.
+            # No snapshot is written for failures, so the next run retries them.
+            try:
+                payload = fetch_once(resource_type, str(resource_id), path)
+            except PokeApiError as exc:
+                report.failed.append(path)
+                logger.warning(
+                    "backfill resource failed; stub row keeps name only until a re-run",
+                    extra={"path": path, "error": str(exc)},
+                )
+                continue
             with session_factory() as session:
                 normalizer(session, payload)
                 session.commit()
@@ -124,6 +138,7 @@ def ingest_generation(
             "fetched": report.fetched,
             "reused": report.reused,
             "normalized": report.normalized,
+            "failed": report.failed,
         },
     )
     return report
