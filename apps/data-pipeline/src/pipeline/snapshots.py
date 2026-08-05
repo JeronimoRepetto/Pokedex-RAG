@@ -29,6 +29,11 @@ class SnapshotStore:
         with self._session_factory() as session:
             return self._get(session, resource_type, resource_id) is not None
 
+    def get_payload(self, resource_type: str, resource_id: str) -> dict[str, Any] | None:
+        with self._session_factory() as session:
+            snapshot = self._get(session, resource_type, resource_id)
+            return None if snapshot is None else snapshot.payload
+
     def save(
         self,
         resource_type: str,

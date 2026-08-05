@@ -41,6 +41,51 @@ def db_current() -> None:
 
 
 @app.command()
+def ingest(
+    generation: int = typer.Option(1, help="Generation number to ingest (fetch-once)"),
+) -> None:
+    """Fetch, snapshot and normalize a whole generation from PokéAPI."""
+    from pipeline.ingest import ingest_generation
+    from pipeline.pokeapi import PokeApiClient
+    from pipeline.snapshots import SnapshotStore
+
+    settings = bootstrap()
+    engine = create_db_engine(settings.database_url)
+    session_factory = create_session_factory(engine)
+    store = SnapshotStore(session_factory, settings.data_dir)
+    with PokeApiClient(
+        settings.pokeapi_base_url,
+        timeout_seconds=settings.http_timeout_seconds,
+        rate_limit_per_sec=settings.pokeapi_rate_limit_per_sec,
+        max_attempts=settings.http_max_attempts,
+    ) as client:
+        report = ingest_generation(client, store, session_factory, generation=generation)
+    typer.echo(f"fetched={report.fetched} reused={report.reused} normalized={report.normalized}")
+
+
+@app.command()
+def sprites() -> None:
+    """Download sprite files referenced by the manifest (idempotent)."""
+    from pipeline.sprites import SpriteDownloader
+
+    settings = bootstrap()
+    engine = create_db_engine(settings.database_url)
+    downloader = SpriteDownloader(
+        create_session_factory(engine),
+        settings.data_dir,
+        timeout_seconds=settings.http_timeout_seconds,
+        rate_limit_per_sec=settings.pokeapi_rate_limit_per_sec,
+    )
+    try:
+        downloaded, skipped, failed = downloader.run()
+    finally:
+        downloader.close()
+    typer.echo(f"downloaded={downloaded} skipped={skipped} failed={failed}")
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def status() -> None:
     """Report schema revision presence and row counts for known tables."""
     settings = bootstrap()

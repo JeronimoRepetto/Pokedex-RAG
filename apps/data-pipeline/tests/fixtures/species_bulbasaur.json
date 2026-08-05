@@ -8,6 +8,12 @@
   "habitat": { "name": "grassland", "url": "https://pokeapi.co/api/v2/pokemon-habitat/3/" },
   "generation": { "name": "generation-i", "url": "https://pokeapi.co/api/v2/generation/1/" },
   "evolution_chain": { "url": "https://pokeapi.co/api/v2/evolution-chain/1/" },
+  "varieties": [
+    {
+      "is_default": true,
+      "pokemon": { "name": "bulbasaur", "url": "https://pokeapi.co/api/v2/pokemon/1/" }
+    }
+  ],
   "flavor_text_entries": [
     {
       "flavor_text": "A strange seed was\nplanted on its\nback at birth.",

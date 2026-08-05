@@ -210,6 +210,12 @@ def _upsert_sprites(session: Session, pokemon_id: int, sprites: dict[str, Any]) 
 
 
 def normalize_evolution_chain(session: Session, payload: dict[str, Any]) -> None:
+    """Insert evolution edges for one chain.
+
+    Edges touching species that are not ingested (e.g. a Gen-2 evolution of a Gen-1
+    Pokémon, like golbat→crobat) are skipped with a warning — explicit, logged
+    degradation while the project only ingests Gen 1.
+    """
     chain_id = payload["id"]
     session.execute(delete(Evolution).where(Evolution.chain_id == chain_id))
 
@@ -217,6 +223,13 @@ def normalize_evolution_chain(session: Session, payload: dict[str, Any]) -> None
         from_id = extract_id(node["species"]["url"])
         for child in node.get("evolves_to", []):
             to_id = extract_id(child["species"]["url"])
+            if session.get(Species, from_id) is None or session.get(Species, to_id) is None:
+                logger.warning(
+                    "evolution edge skipped: species not ingested",
+                    extra={"chain_id": chain_id, "from": from_id, "to": to_id},
+                )
+                walk(child)
+                continue
             details = child.get("evolution_details", [])
             first = details[0] if details else {}
             session.add(
