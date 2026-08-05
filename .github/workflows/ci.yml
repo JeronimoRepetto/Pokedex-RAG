@@ -14,6 +14,7 @@ jobs:
         component:
           - libs/common
           - libs/db
+          - apps/data-pipeline
     defaults:
       run:
         working-directory: ${{ matrix.component }}

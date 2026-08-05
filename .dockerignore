@@ -1,0 +1,15 @@
+# Build contexts are the repo root; keep images free of local-only and heavy paths.
+.git
+.claude
+.codegraph
+docs
+data
+.env
+.env.*
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/tests
+.github
+Makefile

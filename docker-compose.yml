@@ -18,5 +18,20 @@ services:
       timeout: 5s
       retries: 10
 
+  # One-shot migration job (same image as the data pipeline). Not started by default:
+  #   docker compose run --rm migrate
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/data-pipeline/Dockerfile
+    image: pokedex-data-pipeline:local
+    profiles: ["tools"]
+    command: ["db", "upgrade"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pokedex}:${POSTGRES_PASSWORD:-pokedex}@db:5432/${POSTGRES_DB:-pokedex}
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
