@@ -37,6 +37,10 @@ def _l2_norm(vector: list[float]) -> float:
 
 
 class GeminiEmbedder:
+    """One request per item: gemini-embedding-2 via `global` treats the whole `contents`
+    list as a SINGLE input and returns exactly one embedding (verified live 2026-08-05,
+    devlog 0017) — request-level batching would silently misalign items and vectors."""
+
     def __init__(
         self,
         *,
@@ -44,7 +48,6 @@ class GeminiEmbedder:
         location: str,
         model: str,
         dimensions: int,
-        batch_size: int = 32,
         max_attempts: int = 4,
         backoff_base_seconds: float = 1.0,
         sleep: Callable[[float], None] = time.sleep,
@@ -57,24 +60,20 @@ class GeminiEmbedder:
         self._client = client
         self._model = model
         self._dimensions = dimensions
-        self._batch_size = batch_size
         self._max_attempts = max_attempts
         self._backoff_base = backoff_base_seconds
         self._sleep = sleep
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        vectors: list[list[float]] = []
-        for start in range(0, len(texts), self._batch_size):
-            vectors.extend(self._embed(texts[start : start + self._batch_size]))
-        return vectors
+        return [self._embed_one(text) for text in texts]
 
     def embed_image(self, data: bytes, mime_type: str) -> list[float]:
         from google.genai import types
 
         part = types.Part.from_bytes(data=data, mime_type=mime_type)
-        return self._embed([part])[0]
+        return self._embed_one(part)
 
-    def _embed(self, contents: list) -> list[list[float]]:
+    def _embed_one(self, content) -> list[float]:
         from google.genai import errors, types
 
         config = types.EmbedContentConfig(output_dimensionality=self._dimensions)
@@ -82,7 +81,7 @@ class GeminiEmbedder:
         for attempt in range(1, self._max_attempts + 1):
             try:
                 response = self._client.models.embed_content(
-                    model=self._model, contents=contents, config=config
+                    model=self._model, contents=[content], config=config
                 )
             except errors.APIError as exc:
                 if exc.code not in TRANSIENT_STATUS_CODES:
@@ -91,7 +90,12 @@ class GeminiEmbedder:
                     ) from exc
                 last_error = f"HTTP {exc.code}"
             else:
-                return [self._validated(e.values) for e in response.embeddings]
+                if len(response.embeddings) != 1:
+                    raise EmbeddingError(
+                        f"{self._model} returned {len(response.embeddings)} embeddings for "
+                        "one input — endpoint contract changed; re-run verify-vertex."
+                    )
+                return self._validated(response.embeddings[0].values)
             if attempt < self._max_attempts:
                 delay = self._backoff_base * 2 ** (attempt - 1)
                 logger.warning(
