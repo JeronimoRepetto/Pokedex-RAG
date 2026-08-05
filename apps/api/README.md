@@ -16,7 +16,15 @@ Configuration via environment (or repo-root `.env`): `DATABASE_URL` (required),
 ## Endpoints
 
 - `GET /health` — 200/503 with per-dependency detail (database).
+- `GET /pokemon`, `GET /pokemon/{id_or_name}`, `GET /pokemon/{id}/evolution-chain`.
+- `POST /search/text` — `{query, mode: vector|lexical|hybrid, limit}`; hybrid fuses the
+  HNSW vector leg and the tsvector lexical leg with RRF.
+- `POST /search/image` — multipart image → image-to-image match over sprite vectors.
 - `GET /docs`, `GET /openapi.json` — API documentation.
+
+Search requires the embeddings configuration (`GCP_PROJECT_ID`, `EMBEDDING_*` — see
+`.env.example`) and an ingested + embedded corpus (`pipeline ingest && pipeline
+build-docs && pipeline embed --sprites`).
 
 ## Run with Docker
 
