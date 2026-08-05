@@ -1,10 +1,26 @@
 """SQLAlchemy models. Types use variants so unit tests can run on SQLite;
-migrations only ever run against PostgreSQL."""
+migrations only ever run against PostgreSQL.
+
+Domain ids reuse PokéAPI ids verbatim (pokemon.id, species.id, types.id, ...) so every
+row stays traceable to its snapshot. Measurements keep PokéAPI units: height in
+decimetres, weight in hectograms.
+"""
 
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, DateTime, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -34,4 +50,148 @@ class RawSnapshot(Base):
     source_url: Mapped[str] = mapped_column(Text)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONVariant)
     sha256: Mapped[str] = mapped_column(String(64))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Species(Base):
+    __tablename__ = "species"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # PokéAPI species id
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    generation: Mapped[int] = mapped_column(Integer, index=True)
+    color: Mapped[str | None] = mapped_column(String(50))
+    habitat: Mapped[str | None] = mapped_column(String(50))
+    capture_rate: Mapped[int | None] = mapped_column(Integer)
+    is_legendary: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_mythical: Mapped[bool] = mapped_column(Boolean, default=False)
+    evolution_chain_id: Mapped[int | None] = mapped_column(Integer, index=True)
+
+
+class Pokemon(Base):
+    __tablename__ = "pokemon"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # PokéAPI pokemon id
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    species_id: Mapped[int] = mapped_column(ForeignKey("species.id"), index=True)
+    height: Mapped[int | None] = mapped_column(Integer)  # decimetres
+    weight: Mapped[int | None] = mapped_column(Integer)  # hectograms
+    base_experience: Mapped[int | None] = mapped_column(Integer)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Type(Base):
+    __tablename__ = "types"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # PokéAPI type id
+    name: Mapped[str] = mapped_column(String(50), unique=True)
+
+
+class PokemonType(Base):
+    __tablename__ = "pokemon_types"
+
+    pokemon_id: Mapped[int] = mapped_column(ForeignKey("pokemon.id"), primary_key=True)
+    slot: Mapped[int] = mapped_column(Integer, primary_key=True)
+    type_id: Mapped[int] = mapped_column(ForeignKey("types.id"), index=True)
+
+
+class Ability(Base):
+    __tablename__ = "abilities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # PokéAPI ability id
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    effect_text: Mapped[str | None] = mapped_column(Text)
+
+
+class PokemonAbility(Base):
+    __tablename__ = "pokemon_abilities"
+
+    pokemon_id: Mapped[int] = mapped_column(ForeignKey("pokemon.id"), primary_key=True)
+    slot: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ability_id: Mapped[int] = mapped_column(ForeignKey("abilities.id"), index=True)
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class PokemonStat(Base):
+    __tablename__ = "pokemon_stats"
+
+    pokemon_id: Mapped[int] = mapped_column(ForeignKey("pokemon.id"), primary_key=True)
+    stat_name: Mapped[str] = mapped_column(String(30), primary_key=True)  # hp, attack, ...
+    base_value: Mapped[int] = mapped_column(Integer)
+    effort: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Move(Base):
+    __tablename__ = "moves"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # PokéAPI move id
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    type_id: Mapped[int | None] = mapped_column(ForeignKey("types.id"))
+    power: Mapped[int | None] = mapped_column(Integer)
+    accuracy: Mapped[int | None] = mapped_column(Integer)
+    pp: Mapped[int | None] = mapped_column(Integer)
+    damage_class: Mapped[str | None] = mapped_column(String(30))
+    effect_text: Mapped[str | None] = mapped_column(Text)
+
+
+class PokemonMove(Base):
+    __tablename__ = "pokemon_moves"
+
+    pokemon_id: Mapped[int] = mapped_column(ForeignKey("pokemon.id"), primary_key=True)
+    move_id: Mapped[int] = mapped_column(ForeignKey("moves.id"), primary_key=True)
+    learn_method: Mapped[str] = mapped_column(String(30), primary_key=True)
+    level: Mapped[int] = mapped_column(Integer, primary_key=True, default=0)
+
+
+class Evolution(Base):
+    """One evolution edge (from -> to) with its trigger conditions.
+
+    Extra condition details beyond the common trigger/min_level/item stay in
+    `conditions` verbatim (JSON), so nothing from the chain payload is lost.
+    """
+
+    __tablename__ = "evolutions"
+    __table_args__ = (
+        UniqueConstraint("from_species_id", "to_species_id", name="uq_evolutions_edge"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    chain_id: Mapped[int] = mapped_column(Integer, index=True)
+    from_species_id: Mapped[int] = mapped_column(ForeignKey("species.id"), index=True)
+    to_species_id: Mapped[int] = mapped_column(ForeignKey("species.id"), index=True)
+    trigger: Mapped[str | None] = mapped_column(String(50))
+    min_level: Mapped[int | None] = mapped_column(Integer)
+    item: Mapped[str | None] = mapped_column(String(100))
+    conditions: Mapped[dict[str, Any]] = mapped_column(JSONVariant, default=dict)
+
+
+class FlavorText(Base):
+    __tablename__ = "flavor_texts"
+    __table_args__ = (
+        UniqueConstraint("species_id", "version", "language", name="uq_flavor_texts_entry"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    species_id: Mapped[int] = mapped_column(ForeignKey("species.id"), index=True)
+    version: Mapped[str] = mapped_column(String(50))
+    language: Mapped[str] = mapped_column(String(20))
+    text: Mapped[str] = mapped_column(Text)
+
+
+class Sprite(Base):
+    """Manifest of downloaded sprite files. The image bytes live under data/ (never in
+    git); this row records provenance and integrity."""
+
+    __tablename__ = "sprites"
+    __table_args__ = (UniqueConstraint("pokemon_id", "kind", name="uq_sprites_pokemon_kind"),)
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    pokemon_id: Mapped[int] = mapped_column(ForeignKey("pokemon.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(50))  # default, shiny, official-artwork, ...
+    source_url: Mapped[str] = mapped_column(Text)
+    local_path: Mapped[str | None] = mapped_column(Text)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    license_note: Mapped[str] = mapped_column(
+        Text,
+        default="Images © The Pokémon Company; fetched via PokeAPI/sprites for educational use.",
+    )
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

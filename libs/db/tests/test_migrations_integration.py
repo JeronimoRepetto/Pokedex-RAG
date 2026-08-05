@@ -52,7 +52,22 @@ def test_upgrade_head_creates_schema_and_downgrade_removes_it(migrated_url: str)
     command.upgrade(config, "head")
     engine = create_engine(migrated_url)
     inspector = inspect(engine)
-    assert "raw_snapshots" in inspector.get_table_names()
+    tables = set(inspector.get_table_names())
+    assert {
+        "raw_snapshots",
+        "species",
+        "pokemon",
+        "types",
+        "pokemon_types",
+        "abilities",
+        "pokemon_abilities",
+        "pokemon_stats",
+        "moves",
+        "pokemon_moves",
+        "evolutions",
+        "flavor_texts",
+        "sprites",
+    } <= tables
     unique_names = {c["name"] for c in inspector.get_unique_constraints("raw_snapshots")}
     assert "uq_raw_snapshots_resource" in unique_names
     columns = {c["name"] for c in inspector.get_columns("raw_snapshots")}
