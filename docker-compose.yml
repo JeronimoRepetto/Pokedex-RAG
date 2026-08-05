@@ -7,7 +7,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pokedex}
       POSTGRES_DB: ${POSTGRES_DB:-pokedex}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Host default is 5433: a PostgreSQL inside WSL owns 5432 on this machine and
+      # WSL2's shared VM network makes it shadow the container's published port.
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
