@@ -18,3 +18,10 @@ class PipelineSettings(BaseAppSettings):
     pokeapi_rate_limit_per_sec: float = 3.0
     http_timeout_seconds: float = 30.0
     http_max_attempts: int = 4
+
+    # Embeddings (values live-verified in ADR-0002; only read by the embed command)
+    gcp_project_id: str = ""
+    embedding_model: str = ""
+    embedding_location: str = ""
+    embedding_dimensions: int = 768
+    embedding_space_label: str = ""

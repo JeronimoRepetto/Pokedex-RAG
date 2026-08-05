@@ -47,19 +47,30 @@ def make_embedder(client: StubClient, *, dimensions: int = 4, **overrides) -> Ge
     return GeminiEmbedder(**defaults)
 
 
-def test_returns_vectors_and_batches_requests() -> None:
+def test_sends_exactly_one_request_per_text() -> None:
+    """Regression (live, 2026-08-05): the endpoint returns ONE embedding per request no
+    matter how many contents are sent — per-item requests are the only safe shape."""
     client = StubClient(
         [
-            make_response([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]),
+            make_response([[1.0, 0.0, 0.0, 0.0]]),
+            make_response([[0.0, 1.0, 0.0, 0.0]]),
             make_response([[0.0, 0.0, 1.0, 0.0]]),
         ]
     )
-    embedder = make_embedder(client, batch_size=2)
+    embedder = make_embedder(client)
 
     vectors = embedder.embed_texts(["a", "b", "c"])
 
     assert len(vectors) == 3
-    assert [len(call) for call in client.calls] == [2, 1]
+    assert [len(call) for call in client.calls] == [1, 1, 1]
+
+
+def test_unexpected_embedding_count_fails_fast() -> None:
+    client = StubClient([make_response([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]])])
+    embedder = make_embedder(client)
+
+    with pytest.raises(EmbeddingError, match="contract changed"):
+        embedder.embed_texts(["a"])
 
 
 def test_dimension_mismatch_fails_fast_with_actionable_message() -> None:
