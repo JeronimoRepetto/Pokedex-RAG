@@ -117,6 +117,40 @@ jobs:
           poetry run evals compare --fake-api | tee compare.log
           grep -q "provider(s)" compare.log
 
+  images:
+    # Regression guard for a real bug (Phase 6.6): all three Dockerfiles copied only a
+    # SUBSET of the libs/ their pyproject declares as path dependencies, so none of them
+    # could build — invisible for several phases because nothing in CI ever built an
+    # image. Unit tests and `poetry run` pass happily while the container is broken.
+    # The api image is also started and probed: a build that succeeds can still fail to
+    # boot (a wrong CMD, a missing runtime file), and /health is the cheapest proof.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [api, data-pipeline, evals]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.component }} image
+        # Repo root as context so libs/ is reachable, exactly as the READMEs document.
+        run: docker build -f apps/${{ matrix.component }}/Dockerfile -t pokedex-${{ matrix.component }}:ci .
+
+      - name: The api image boots and serves /health
+        if: matrix.component == 'api'
+        run: |
+          set -euo pipefail
+          docker run -d --name api-smoke -p 8080:8080 -e PORT=8080 \
+            -e DATABASE_URL='sqlite+pysqlite:///:memory:' pokedex-api:ci
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          docker logs api-smoke
+          test "$code" = "200"
+          docker rm -f api-smoke
+
   integration:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
