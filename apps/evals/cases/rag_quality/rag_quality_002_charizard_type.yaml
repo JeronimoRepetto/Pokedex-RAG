@@ -1,0 +1,8 @@
+case_id: rag_quality_002
+suite: rag_quality
+input:
+  question: "what type is charizard?"
+expected:
+  status: answered
+  must_contain: ["fire"]
+origin: handwritten

@@ -1,0 +1,7 @@
+case_id: rag_quality_011
+suite: rag_quality
+input:
+  question: "what is the population of pallet town?"
+expected:
+  status: insufficient_evidence
+origin: handwritten

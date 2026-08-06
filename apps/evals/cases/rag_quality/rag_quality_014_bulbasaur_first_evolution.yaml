@@ -1,0 +1,8 @@
+case_id: rag_quality_014
+suite: rag_quality
+input:
+  question: "what does bulbasaur evolve into?"
+expected:
+  status: answered
+  must_contain: ["ivysaur"]
+origin: handwritten

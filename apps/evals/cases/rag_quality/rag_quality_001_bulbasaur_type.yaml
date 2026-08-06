@@ -1,0 +1,8 @@
+case_id: rag_quality_001
+suite: rag_quality
+input:
+  question: "what type is bulbasaur?"
+expected:
+  status: answered
+  must_contain: ["grass", "poison"]
+origin: handwritten

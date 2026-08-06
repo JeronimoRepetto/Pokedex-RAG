@@ -1,0 +1,9 @@
+case_id: rag_quality_015
+suite: rag_quality
+input:
+  question: "what type is meowth?"
+expected:
+  status: answered
+  must_contain: ["normal"]
+  must_not_contain: ["dark"]
+origin: handwritten

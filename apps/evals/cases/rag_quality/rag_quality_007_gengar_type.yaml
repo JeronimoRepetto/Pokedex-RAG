@@ -1,0 +1,8 @@
+case_id: rag_quality_007
+suite: rag_quality
+input:
+  question: "what type is gengar?"
+expected:
+  status: answered
+  must_contain: ["ghost"]
+origin: handwritten

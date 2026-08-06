@@ -1,0 +1,7 @@
+case_id: rag_quality_012
+suite: rag_quality
+input:
+  question: "what does charizard think about squirtle?"
+expected:
+  status: insufficient_evidence
+origin: handwritten

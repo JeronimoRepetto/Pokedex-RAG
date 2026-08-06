@@ -1,10 +1,17 @@
-"""Persist an eval run + its per-case results (eval_runs/eval_results, migration 0005)."""
+"""Persist an eval run + its per-case results (eval_runs/eval_results, migration 0005).
+
+Score-shape-agnostic: works with `CaseScore` (retrieval, `retrieved_ids`) and
+`RagQualityScore` (`citation_document_ids`) alike, by duck-typing on whichever id
+field a given score dataclass actually has.
+"""
 
 from dataclasses import asdict
 from datetime import datetime
+from typing import Any
 
-from evals.scoring import CaseScore
 from pokedex_db.models import EvalResult, EvalRun
+
+_ID_FIELDS = ("retrieved_ids", "citation_document_ids")
 
 
 def save_run(
@@ -14,7 +21,7 @@ def save_run(
     api_base_url: str,
     started_at: datetime,
     finished_at: datetime,
-    scores: list[CaseScore],
+    scores: list[Any],
     summary: dict[str, float],
 ) -> int:
     with session_factory() as session:
@@ -30,13 +37,10 @@ def save_run(
         session.flush()  # assigns run.id without committing yet
         for score in scores:
             fields = asdict(score)
+            case_id = fields.pop("case_id")
+            ids = next((fields.pop(f) for f in _ID_FIELDS if f in fields), [])
             session.add(
-                EvalResult(
-                    run_id=run.id,
-                    case_id=fields.pop("case_id"),
-                    retrieved_ids=fields.pop("retrieved_ids"),
-                    metrics=fields,
-                )
+                EvalResult(run_id=run.id, case_id=case_id, retrieved_ids=ids, metrics=fields)
             )
         session.commit()
         return run.id

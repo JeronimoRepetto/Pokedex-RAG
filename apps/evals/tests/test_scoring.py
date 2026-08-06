@@ -1,7 +1,7 @@
 import pytest
 
 from evals.cases import GoldenCase
-from evals.scoring import score_case, summarize
+from evals.scoring import score_case, score_rag_quality, summarize, summarize_rag_quality
 
 
 def make_case(limit: int = 5, relevant: list[int] | None = None) -> GoldenCase:
@@ -61,3 +61,81 @@ def test_summarize_averages_every_metric_across_cases() -> None:
 def test_summarize_rejects_an_empty_list() -> None:
     with pytest.raises(ValueError, match="no scores"):
         summarize([])
+
+
+def make_rag_case(**expected_overrides) -> GoldenCase:
+    expected = {"status": "answered", "must_contain": ["water"]}
+    expected.update(expected_overrides)
+    return GoldenCase(
+        case_id="rag_quality_001",
+        suite="rag_quality",
+        input={"question": "what type is squirtle?"},
+        expected=expected,
+        origin="handwritten",
+    )
+
+
+def test_rag_quality_passes_when_status_and_contains_all_match() -> None:
+    response = {"status": "answered", "answer": "Squirtle is a Water type [1].", "citations": []}
+
+    score = score_rag_quality(make_rag_case(), response)
+
+    assert score.status_match == 1.0
+    assert score.must_contain_ok == 1.0
+    assert score.must_not_contain_ok == 1.0
+    assert score.passed == 1.0
+
+
+def test_rag_quality_fails_on_a_hallucinated_forbidden_word() -> None:
+    response = {"status": "answered", "answer": "Squirtle is a Grass type [1].", "citations": []}
+
+    score = score_rag_quality(make_rag_case(must_not_contain=["grass"]), response)
+
+    assert score.must_not_contain_ok == 0.0
+    assert score.passed == 0.0
+
+
+def test_rag_quality_fails_when_a_required_fact_is_missing() -> None:
+    response = {"status": "answered", "answer": "Squirtle is very small.", "citations": []}
+
+    score = score_rag_quality(make_rag_case(), response)
+
+    assert score.must_contain_ok == 0.0
+    assert score.passed == 0.0
+
+
+def test_rag_quality_checks_status_for_must_abstain_cases() -> None:
+    case = make_rag_case(status="insufficient_evidence", must_contain=[])
+    grounded_abstain = {"status": "insufficient_evidence", "answer": None, "citations": []}
+    wrongly_answered = {"status": "answered", "answer": "Squirtle loves swimming.", "citations": []}
+
+    assert score_rag_quality(case, grounded_abstain).passed == 1.0
+    assert score_rag_quality(case, wrongly_answered).status_match == 0.0
+
+
+def test_rag_quality_case_insensitive_matching() -> None:
+    response = {"status": "answered", "answer": "SQUIRTLE IS A WATER TYPE [1].", "citations": []}
+
+    score = score_rag_quality(make_rag_case(), response)
+
+    assert score.must_contain_ok == 1.0
+
+
+def test_summarize_rag_quality_averages_every_field() -> None:
+    passing = score_rag_quality(
+        make_rag_case(), {"status": "answered", "answer": "water", "citations": []}
+    )
+    failing = score_rag_quality(
+        make_rag_case(), {"status": "answered", "answer": "nothing relevant", "citations": []}
+    )
+
+    summary = summarize_rag_quality([passing, failing])
+
+    assert summary["status_match_rate"] == pytest.approx(1.0)
+    assert summary["must_contain_rate"] == pytest.approx(0.5)
+    assert summary["pass_rate"] == pytest.approx(0.5)
+
+
+def test_summarize_rag_quality_rejects_an_empty_list() -> None:
+    with pytest.raises(ValueError, match="no scores"):
+        summarize_rag_quality([])
