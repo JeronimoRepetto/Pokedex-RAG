@@ -1,7 +1,8 @@
 # pokedex-llm
 
 Provider-independent LLM gateway: the `LLMGateway` protocol, the Vertex Gemini adapter,
-a scriptable `FakeLLM`, and a shared contract-test suite every adapter must pass.
+a scriptable `FakeLLM`, a `ProviderRegistry` for config-driven selection, and a shared
+contract-test suite every adapter must pass.
 
 ## Use from another component
 
@@ -24,6 +25,14 @@ result = gateway.generate(GenerationRequest(messages=[...]))
   `PermanentProviderError` (fail fast). Vendor exceptions never escape the adapter.
 - `FakeLLM(script=[...])` supports response scripting and error injection for graph and
   chaos tests.
+- `ProviderRegistry` maps a config name (e.g. `LLM_PRIMARY`) to a zero-arg adapter
+  factory, so lookups stay credential-free until a provider is actually built:
+
+  ```python
+  registry = ProviderRegistry()
+  registry.register("vertex-gemini", lambda: VertexGeminiAdapter(...))
+  gateway = registry.build(settings.llm_primary)  # UnknownProviderError if unregistered
+  ```
 
 ## How to add a provider
 

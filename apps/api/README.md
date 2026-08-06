@@ -11,7 +11,10 @@ poetry run uvicorn api.main:app --factory --reload --port 8000
 ```
 
 Configuration via environment (or repo-root `.env`): `DATABASE_URL` (required),
-`LOG_LEVEL`, `ENVIRONMENT`. Missing required config aborts at startup.
+`LOG_LEVEL`, `ENVIRONMENT`. Missing required config aborts at startup. `LLM_PRIMARY`
+(default `vertex-gemini`) and `LLM_FALLBACK` select providers from the gateway's
+`ProviderRegistry`; an unregistered name also aborts at startup, before any credential
+is touched.
 
 ## Endpoints
 
@@ -20,6 +23,10 @@ Configuration via environment (or repo-root `.env`): `DATABASE_URL` (required),
 - `POST /search/text` — `{query, mode: vector|lexical|hybrid, limit}`; hybrid fuses the
   HNSW vector leg and the tsvector lexical leg with RRF.
 - `POST /search/image` — multipart image → image-to-image match over sprite vectors.
+- `POST /chat` — `{question, provider?}` → grounded answer with `[n]` citations
+  resolved to source documents (see `pokedex_common.contracts.RAGResponse`); persists to
+  `rag_answers` and traces to Langfuse when configured. `provider` optionally overrides
+  `LLM_PRIMARY` for one request (manual A/B between providers) — 422 if unregistered.
 - `GET /docs`, `GET /openapi.json` — API documentation.
 
 Search requires the embeddings configuration (`GCP_PROJECT_ID`, `EMBEDDING_*` — see

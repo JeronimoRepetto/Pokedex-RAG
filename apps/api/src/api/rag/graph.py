@@ -30,7 +30,9 @@ from pokedex_llm import (
     LLMGateway,
     Message,
     PermanentProviderError,
+    ProviderRegistry,
     TransientProviderError,
+    UnknownProviderError,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,7 @@ class RagDeps:
     retrieval_limit: int = 8
     context_budget_chars: int = 12_000
     max_output_tokens: int = 2048  # thinking models spend reasoning tokens from this
+    provider_registry: ProviderRegistry | None = None  # resolves provider_override
 
 
 def build_graph(deps: RagDeps):
@@ -90,6 +93,16 @@ def build_graph(deps: RagDeps):
         ordered = [loaded[hit.document_id] for hit in fused if hit.document_id in loaded]
         return {"context": build_context(ordered, deps.context_budget_chars)}
 
+    def resolve_gateway(state: RAGState) -> LLMGateway:
+        override = state.get("provider_override")
+        if not override:
+            return deps.gateway
+        if deps.provider_registry is None:
+            raise UnknownProviderError(
+                f"provider override {override!r} requested but no registry is configured"
+            )
+        return deps.provider_registry.build(override)
+
     def generate(state: RAGState) -> dict:
         context: BuiltContext | None = state.get("context")
         if context is None or not context.citation_map:
@@ -98,6 +111,7 @@ def build_graph(deps: RagDeps):
                 "warnings": ["retrieval returned no usable documents"],
                 "draft_answer": "",
             }
+        gateway = resolve_gateway(state)
         request = GenerationRequest(
             messages=[
                 Message(role="system", content=SYSTEM_PROMPT),
@@ -112,15 +126,15 @@ def build_graph(deps: RagDeps):
             max_output_tokens=deps.max_output_tokens,
         )
         try:
-            result = deps.gateway.generate(request)
+            result = gateway.generate(request)
         except (TransientProviderError, PermanentProviderError) as exc:
             logger.error("generation failed", extra={"error": str(exc)})
             return {
                 "status": "provider_error",
                 "warnings": [f"generation failed: {exc}"],
                 "draft_answer": "",
-                "provider": deps.gateway.provider_name,
-                "model": deps.gateway.model_name,
+                "provider": gateway.provider_name,
+                "model": gateway.model_name,
             }
         return {
             "draft_answer": result.text,

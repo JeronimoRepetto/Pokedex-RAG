@@ -10,6 +10,7 @@ from pokedex_llm.gateway import (
     TransientProviderError,
     Usage,
 )
+from pokedex_llm.registry import ProviderRegistry, UnknownProviderError
 from pokedex_llm.vertex import VertexGeminiAdapter
 
 __all__ = [
@@ -19,7 +20,9 @@ __all__ = [
     "LLMGateway",
     "Message",
     "PermanentProviderError",
+    "ProviderRegistry",
     "TransientProviderError",
+    "UnknownProviderError",
     "Usage",
     "VertexGeminiAdapter",
 ]

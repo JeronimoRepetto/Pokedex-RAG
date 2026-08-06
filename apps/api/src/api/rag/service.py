@@ -20,7 +20,9 @@ class ChatService:
         self._session_factory = session_factory
         self._tracing = tracing or Tracing()  # disabled unless keys configured
 
-    def ask(self, question: str, request_id: str) -> RAGResponse:
+    def ask(
+        self, question: str, request_id: str, provider_override: str | None = None
+    ) -> RAGResponse:
         started = time.perf_counter()
         with self._tracing.chat_trace(question, request_id, PROMPT_VERSION) as (
             callbacks,
@@ -28,7 +30,12 @@ class ChatService:
         ):
             config = {"callbacks": callbacks} if callbacks else {}
             state = self._graph.invoke(
-                {"question": question, "request_id": request_id}, config=config
+                {
+                    "question": question,
+                    "request_id": request_id,
+                    "provider_override": provider_override,
+                },
+                config=config,
             )
             trace_id = get_trace_id()
         latency_ms = round((time.perf_counter() - started) * 1000)
