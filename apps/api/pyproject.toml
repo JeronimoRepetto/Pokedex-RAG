@@ -12,6 +12,8 @@ dependencies = [
     "python-multipart (>=0.0.32,<0.0.33)",
     "pokedex-llm @ file:///C:/Users/jeron/Desktop/Pokedex-RAG/libs/llm-gateway",
     "langgraph (>=1.2.10,<2.0.0)",
+    "langfuse (>=4.14,<5.0)",
+    "langchain (>=1.3.14,<2.0.0)",
 ]
 
 [tool.poetry]

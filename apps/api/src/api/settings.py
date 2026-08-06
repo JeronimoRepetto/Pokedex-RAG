@@ -22,3 +22,8 @@ class ApiSettings(BaseAppSettings):
     # Generation (live-verified: gemini-3.6-flash serves from "global")
     generation_model: str = ""
     generation_location: str = ""
+
+    # Langfuse (tracing disabled when keys are empty)
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"

@@ -114,7 +114,16 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         gateway=_LazyGateway(gateway_factory),
         document_loader=SqlDocumentLoader(app.state.session_factory),
     )
-    app.state.chat_service = ChatService(build_graph(rag_deps), app.state.session_factory)
+    from api.rag.tracing import Tracing
+
+    tracing = Tracing(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        host=settings.langfuse_base_url,
+    )
+    app.state.chat_service = ChatService(
+        build_graph(rag_deps), app.state.session_factory, tracing=tracing
+    )
 
     app.add_middleware(RequestIdMiddleware)
     app.include_router(health_router)

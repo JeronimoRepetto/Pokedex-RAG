@@ -13,14 +13,24 @@ logger = logging.getLogger(__name__)
 
 
 class ChatService:
-    def __init__(self, graph, session_factory: sessionmaker[Session]) -> None:
+    def __init__(self, graph, session_factory: sessionmaker[Session], tracing=None) -> None:
+        from api.rag.tracing import Tracing
+
         self._graph = graph
         self._session_factory = session_factory
+        self._tracing = tracing or Tracing()  # disabled unless keys configured
 
-    def ask(self, question: str, request_id: str, callbacks: list | None = None) -> RAGResponse:
+    def ask(self, question: str, request_id: str) -> RAGResponse:
         started = time.perf_counter()
-        config = {"callbacks": callbacks} if callbacks else {}
-        state = self._graph.invoke({"question": question, "request_id": request_id}, config=config)
+        with self._tracing.chat_trace(question, request_id, PROMPT_VERSION) as (
+            callbacks,
+            get_trace_id,
+        ):
+            config = {"callbacks": callbacks} if callbacks else {}
+            state = self._graph.invoke(
+                {"question": question, "request_id": request_id}, config=config
+            )
+            trace_id = get_trace_id()
         latency_ms = round((time.perf_counter() - started) * 1000)
 
         citations = [Citation(**c) for c in state.get("citations", [])]
@@ -34,10 +44,17 @@ class ChatService:
             evaluation_id=None,
             request_id=request_id,
         )
-        self._persist(question, state, response, latency_ms)
+        self._persist(question, state, response, latency_ms, trace_id)
         return response
 
-    def _persist(self, question: str, state: dict, response: RAGResponse, latency_ms: int) -> None:
+    def _persist(
+        self,
+        question: str,
+        state: dict,
+        response: RAGResponse,
+        latency_ms: int,
+        trace_id: str | None = None,
+    ) -> None:
         with self._session_factory() as session:
             session.add(
                 RagAnswer(
@@ -55,7 +72,7 @@ class ChatService:
                     prompt_tokens=state.get("prompt_tokens", 0),
                     output_tokens=state.get("output_tokens", 0),
                     latency_ms=latency_ms,
-                    langfuse_trace_id=None,
+                    langfuse_trace_id=trace_id,
                 )
             )
             session.commit()
