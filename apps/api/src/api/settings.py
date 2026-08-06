@@ -19,6 +19,13 @@ class ApiSettings(BaseAppSettings):
     embedding_dimensions: int = 768
     embedding_space_label: str = ""
 
+    # Local embeddings (Phase 6.1: EmbeddingGemma baseline). Empty label = the extra
+    # space is not registered and /search/text only accepts the primary one. Requires
+    # the optional "local" dependency group (sentence-transformers) at query time.
+    local_embedding_model: str = ""
+    local_embedding_dimensions: int = 768
+    local_embedding_space_label: str = ""
+
     # Generation (live-verified: gemini-3.6-flash serves from "global")
     generation_model: str = ""
     generation_location: str = ""
@@ -42,3 +49,11 @@ class ApiSettings(BaseAppSettings):
     # provider than llm_primary — enforced at startup, not left to good intentions.
     judge_provider: str = ""
     max_reformulate_attempts: int = 2
+
+    # Access gate (Phase 6.6): comma-separated shared keys. EMPTY DISABLES THE GATE —
+    # correct for local dev, unacceptable in a deployment, so the deploy runbook makes
+    # setting it a required step. Never logged; /health stays public for health checks.
+    api_keys: str = ""
+
+    def parsed_api_keys(self) -> frozenset[str]:
+        return frozenset(key.strip() for key in self.api_keys.split(",") if key.strip())

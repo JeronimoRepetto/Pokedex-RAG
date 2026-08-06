@@ -9,7 +9,7 @@ dependencies = [
     "pokedex-common",
     "pokedex-db",
     "httpx (>=0.28.1,<0.29.0)",
-    "pokedex-embeddings @ file:///C:/Users/jeron/Desktop/Pokedex-RAG/libs/embeddings",
+    "pokedex-embeddings",
 ]
 
 [project.scripts]
@@ -21,12 +21,21 @@ packages = [{ include = "pipeline", from = "src" }]
 [tool.poetry.dependencies]
 pokedex-common = { path = "../../libs/common", develop = true }
 pokedex-db = { path = "../../libs/db", develop = true }
-pokedex-embeddings = {develop = true}
+pokedex-embeddings = { path = "../../libs/embeddings", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0,<9.0"
+pytest-cov = ">=6.0,<8.0"
 ruff = ">=0.8,<1.0"
 respx = "^0.23.1"
+
+# Opt-in (poetry install --with local): torch-heavy, only needed to run
+# `pipeline embed --space embeddinggemma-768-v1` (Phase 6.1). Unit tests use fakes.
+[tool.poetry.group.local]
+optional = true
+
+[tool.poetry.group.local.dependencies]
+sentence-transformers = ">=5.0,<6.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

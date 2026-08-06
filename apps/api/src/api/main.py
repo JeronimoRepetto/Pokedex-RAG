@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 
 from api.health import router as health_router
-from api.middleware import RequestIdMiddleware
+from api.middleware import ApiKeyMiddleware, RequestIdMiddleware
+from api.rag.compare import CompareService
 from api.rag.graph import RagDeps, build_graph
 from api.rag.judge import LLMJudge
 from api.rag.loader import SqlDocumentLoader
@@ -9,6 +10,7 @@ from api.rag.service import ChatService
 from api.rag.validation import SqlPokemonTypeLookup
 from api.repositories import SqlPokemonRepository
 from api.routers.chat import router as chat_router
+from api.routers.compare import router as compare_router
 from api.routers.pokemon import router as pokemon_router
 from api.routers.search import router as search_router
 from api.search import SearchService, SqlSearchRepository
@@ -34,6 +36,9 @@ class _LazyEmbedder:
 
     def embed_texts(self, texts):
         return self._get().embed_texts(texts)
+
+    def embed_query(self, text):
+        return self._get().embed_query(text)
 
     def embed_image(self, data, mime_type):
         return self._get().embed_image(data, mime_type)
@@ -101,6 +106,33 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
 
     search_repository = SqlSearchRepository(app.state.session_factory, space)
     app.state.search_service = SearchService(search_repository, embedder_factory)
+
+    # Space registry for /search/text's optional `space` parameter (Phase 6.1): one
+    # service per label, each bound to its own repository + embedder — requests resolve
+    # exactly one space, never a mix. The default label maps to the same instance as
+    # app.state.search_service.
+    app.state.search_services = {settings.embedding_space_label: app.state.search_service}
+    if settings.local_embedding_space_label:
+
+        def local_embedder_factory():
+            # Lazy like the Gemini factory: sentence-transformers (optional "local"
+            # group) is only imported if this space is actually queried.
+            from pokedex_embeddings import LocalSentenceTransformerEmbedder
+
+            return LocalSentenceTransformerEmbedder(
+                model=settings.local_embedding_model,
+                dimensions=settings.local_embedding_dimensions,
+            )
+
+        local_space = SpaceConfig(
+            label=settings.local_embedding_space_label,
+            model_name=settings.local_embedding_model,
+            dimensions=settings.local_embedding_dimensions,
+        )
+        app.state.search_services[settings.local_embedding_space_label] = SearchService(
+            SqlSearchRepository(app.state.session_factory, local_space),
+            local_embedder_factory,
+        )
 
     def gateway_factory():
         from pokedex_llm import VertexGeminiAdapter
@@ -171,12 +203,21 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     app.state.chat_service = ChatService(
         build_graph(rag_deps), app.state.session_factory, tracing=tracing
     )
+    app.state.compare_service = CompareService(
+        rag_deps,
+        app.state.session_factory,
+        judge_provider=settings.judge_provider or None,
+    )
 
+    # Order matters: middleware added last runs first, so the request id exists before
+    # the API-key gate can reject anything (a 401 must still be traceable).
+    app.add_middleware(ApiKeyMiddleware, api_keys=settings.parsed_api_keys())
     app.add_middleware(RequestIdMiddleware)
     app.include_router(health_router)
     app.include_router(pokemon_router)
     app.include_router(search_router)
     app.include_router(chat_router)
+    app.include_router(compare_router)
     return app
 
 

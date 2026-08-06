@@ -11,28 +11,26 @@ adds the judge + its conditional reformulate/abstain routing.
 """
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Protocol
 
 from langgraph.graph import END, START, StateGraph
 
-from api.fusion import reciprocal_rank_fusion
-from api.rag.context import BuiltContext, ContextDocument, build_context
+from api.rag.context import BuiltContext, ContextDocument
 from api.rag.judge import JudgeProtocol
-from api.rag.prompts import (
-    INSUFFICIENT_EVIDENCE_SENTINEL,
-    SYSTEM_PROMPT,
-    USER_TEMPLATE,
+from api.rag.pipeline import (
+    build_generation_request,
+    finalize_answer,
+    fuse_hits,
+    load_context,
+    normalize_question,
 )
 from api.rag.state import RAGState
 from api.rag.validation import PokemonTypeLookupProtocol, check_type_claims
-from api.search import SearchHit, SearchRepositoryProtocol
+from api.search import SearchRepositoryProtocol
 from pokedex_embeddings import EmbedderProtocol
 from pokedex_llm import (
-    GenerationRequest,
     LLMGateway,
-    Message,
     PermanentProviderError,
     ProviderRegistry,
     TransientProviderError,
@@ -40,8 +38,6 @@ from pokedex_llm import (
 )
 
 logger = logging.getLogger(__name__)
-
-CITATION_PATTERN = re.compile(r"\[(\d+)\]")
 
 
 class DocumentLoaderProtocol(Protocol):
@@ -66,10 +62,10 @@ class RagDeps:
 
 def build_graph(deps: RagDeps):
     def analyze_query(state: RAGState) -> dict:
-        return {"normalized_question": " ".join(state["question"].split())}
+        return {"normalized_question": normalize_question(state["question"])}
 
     def retrieve_vector(state: RAGState) -> dict:
-        vector = deps.embedder.embed_texts([state["normalized_question"]])[0]
+        vector = deps.embedder.embed_query(state["normalized_question"])
         return {"vector_hits": deps.repository.vector_search(vector, deps.retrieval_limit)}
 
     def retrieve_lexical(state: RAGState) -> dict:
@@ -80,26 +76,20 @@ def build_graph(deps: RagDeps):
         }
 
     def fuse_rrf(state: RAGState) -> dict:
-        vector_hits = state.get("vector_hits", [])
-        lexical_hits = state.get("lexical_hits", [])
-        by_id: dict[int, SearchHit] = {
-            hit.document_id: hit for hit in [*lexical_hits, *vector_hits]
+        return {
+            "fused_hits": fuse_hits(
+                state.get("vector_hits", []),
+                state.get("lexical_hits", []),
+                deps.retrieval_limit,
+            )
         }
-        fused = reciprocal_rank_fusion(
-            [
-                [hit.document_id for hit in vector_hits],
-                [hit.document_id for hit in lexical_hits],
-            ]
-        )
-        return {"fused_hits": [by_id[doc_id] for doc_id, _ in fused[: deps.retrieval_limit]]}
 
     def build_context_node(state: RAGState) -> dict:
-        fused = state.get("fused_hits", [])
-        if not fused:
-            return {"context": None}
-        loaded = deps.document_loader.load([hit.document_id for hit in fused])
-        ordered = [loaded[hit.document_id] for hit in fused if hit.document_id in loaded]
-        return {"context": build_context(ordered, deps.context_budget_chars)}
+        return {
+            "context": load_context(
+                deps.document_loader, state.get("fused_hits", []), deps.context_budget_chars
+            )
+        }
 
     def resolve_gateway(state: RAGState) -> LLMGateway:
         override = state.get("provider_override")
@@ -128,22 +118,12 @@ def build_graph(deps: RagDeps):
             }
         override = state.get("provider_override")
         gateway = resolve_gateway(state)
-        user_content = USER_TEMPLATE.format(
-            context=context.text, question=state["normalized_question"]
-        )
-        if state.get("attempt", 1) > 1 and state.get("judge_reasoning"):
-            user_content += (
-                f"\n\nA fact-checker rejected your previous answer: "
-                f"{state['judge_reasoning']}. Answer again, more carefully, using ONLY "
-                "the context documents above."
-            )
-        request = GenerationRequest(
-            messages=[
-                Message(role="system", content=SYSTEM_PROMPT),
-                Message(role="user", content=user_content),
-            ],
-            temperature=0.2,
+        retry_feedback = state.get("judge_reasoning") if state.get("attempt", 1) > 1 else None
+        request = build_generation_request(
+            context,
+            state["normalized_question"],
             max_output_tokens=deps.max_output_tokens,
+            judge_feedback=retry_feedback,
         )
         warnings: list[str] = []
         try:
@@ -192,39 +172,14 @@ def build_graph(deps: RagDeps):
     def finalize(state: RAGState) -> dict:
         if state.get("status") in ("insufficient_evidence", "provider_error"):
             return {"answer": None, "citations": []}
-        draft = state.get("draft_answer", "").strip()
         context: BuiltContext = state["context"]
-        if draft.startswith(INSUFFICIENT_EVIDENCE_SENTINEL):
-            detail = draft.removeprefix(INSUFFICIENT_EVIDENCE_SENTINEL).strip()
-            return {
-                "status": "insufficient_evidence",
-                "answer": None,
-                "citations": [],
-                "warnings": [
-                    *state.get("warnings", []),
-                    f"model abstained: {detail}" if detail else "model abstained",
-                ],
-            }
-        markers = sorted({int(m) for m in CITATION_PATTERN.findall(draft)})
-        warnings = list(state.get("warnings", []))
-        valid = [m for m in markers if m in context.citation_map]
-        invalid = [m for m in markers if m not in context.citation_map]
-        if invalid:
-            warnings.append(f"answer cited unknown documents: {invalid}")
-        if not valid:
-            warnings.append("answer contains no valid citations")
-        citations = [
-            {
-                "marker": marker,
-                "document_id": str(context.citation_map[marker].document_id),
-                "source_url": next(
-                    iter(context.citation_map[marker].source_refs.get("pokeapi", [])), None
-                ),
-                "snippet": context.citation_map[marker].title,
-            }
-            for marker in valid
-        ]
-        return {"status": "answered", "answer": draft, "citations": citations, "warnings": warnings}
+        result = finalize_answer(state.get("draft_answer", ""), context)
+        return {
+            "status": result.status,
+            "answer": result.answer,
+            "citations": result.citations,
+            "warnings": [*state.get("warnings", []), *result.warnings],
+        }
 
     def validate(state: RAGState) -> dict:
         if state.get("status") != "answered" or deps.type_lookup is None:

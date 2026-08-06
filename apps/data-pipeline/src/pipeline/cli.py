@@ -104,42 +104,87 @@ def build_docs() -> None:
     )
 
 
+def _build_embedder_and_space(settings: PipelineSettings, space_label: str):
+    """Resolve a space label to (embedder, SpaceConfig, is_multimodal).
+
+    Each label maps to exactly one embedder — vectors from different models must never
+    share a space (ADR-0002), so the routing is an allowlist, not a fallback chain.
+    """
+    from pokedex_embeddings import GeminiEmbedder, LocalSentenceTransformerEmbedder, SpaceConfig
+
+    if space_label == settings.embedding_space_label:
+        for field in (
+            "gcp_project_id",
+            "embedding_model",
+            "embedding_location",
+            "embedding_space_label",
+        ):
+            if not getattr(settings, field):
+                raise typer.BadParameter(
+                    f"{field.upper()} is not configured — see .env.example (embeddings section)."
+                )
+        embedder = GeminiEmbedder(
+            project=settings.gcp_project_id,
+            location=settings.embedding_location,
+            model=settings.embedding_model,
+            dimensions=settings.embedding_dimensions,
+        )
+        space = SpaceConfig(
+            label=settings.embedding_space_label,
+            model_name=settings.embedding_model,
+            dimensions=settings.embedding_dimensions,
+        )
+        return embedder, space, True
+    if space_label and space_label == settings.local_embedding_space_label:
+        if not settings.local_embedding_model:
+            raise typer.BadParameter(
+                "LOCAL_EMBEDDING_MODEL is not configured — see .env.example "
+                "(local embeddings section)."
+            )
+        embedder = LocalSentenceTransformerEmbedder(
+            model=settings.local_embedding_model,
+            dimensions=settings.local_embedding_dimensions,
+        )
+        space = SpaceConfig(
+            label=settings.local_embedding_space_label,
+            model_name=settings.local_embedding_model,
+            dimensions=settings.local_embedding_dimensions,
+        )
+        return embedder, space, False
+    known = [
+        label
+        for label in (settings.embedding_space_label, settings.local_embedding_space_label)
+        if label
+    ]
+    raise typer.BadParameter(f"Unknown embedding space {space_label!r}; configured: {known}")
+
+
 @app.command()
 def embed(
     sprites: bool = typer.Option(False, "--sprites", help="Also embed downloaded sprite images"),
+    space: str = typer.Option(
+        "",
+        "--space",
+        help="Target embedding space label; defaults to the primary (Gemini) space",
+    ),
 ) -> None:
     """Embed documents (and optionally sprites) into the configured space."""
     from pipeline.embedjob import embed_documents, embed_sprites
-    from pokedex_embeddings import GeminiEmbedder, SpaceConfig
 
     settings = bootstrap()
-    for field in (
-        "gcp_project_id",
-        "embedding_model",
-        "embedding_location",
-        "embedding_space_label",
-    ):
-        if not getattr(settings, field):
-            raise typer.BadParameter(
-                f"{field.upper()} is not configured — see .env.example (embeddings section)."
-            )
+    target_label = space or settings.embedding_space_label
+    embedder, space_config, is_multimodal = _build_embedder_and_space(settings, target_label)
+    if sprites and not is_multimodal:
+        raise typer.BadParameter(
+            f"--sprites requires a multimodal space; {target_label!r} is text-only "
+            "(sprites live in the Gemini space, ADR-0002)."
+        )
     engine = create_db_engine(settings.database_url)
     session_factory = create_session_factory(engine)
-    embedder = GeminiEmbedder(
-        project=settings.gcp_project_id,
-        location=settings.embedding_location,
-        model=settings.embedding_model,
-        dimensions=settings.embedding_dimensions,
-    )
-    space = SpaceConfig(
-        label=settings.embedding_space_label,
-        model_name=settings.embedding_model,
-        dimensions=settings.embedding_dimensions,
-    )
-    report = embed_documents(session_factory, embedder, space)
+    report = embed_documents(session_factory, embedder, space_config)
     typer.echo(f"documents: embedded={report.embedded} skipped={report.skipped}")
     if sprites:
-        sprite_report = embed_sprites(session_factory, embedder, space, settings.data_dir)
+        sprite_report = embed_sprites(session_factory, embedder, space_config, settings.data_dir)
         typer.echo(
             f"sprites: embedded={sprite_report.embedded} skipped={sprite_report.skipped} "
             f"failed={len(sprite_report.failed)}"

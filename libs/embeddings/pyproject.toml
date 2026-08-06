@@ -10,6 +10,11 @@ dependencies = [
     "pokedex-db",
 ]
 
+[project.optional-dependencies]
+# Heavy (pulls torch): only for components that actually run the local embedder
+# (Phase 6.1 EmbeddingGemma baseline). Unit tests inject a fake model and never need it.
+local = ["sentence-transformers (>=5.0,<6.0)"]
+
 [tool.poetry]
 packages = [{ include = "pokedex_embeddings", from = "src" }]
 
@@ -18,6 +23,7 @@ pokedex-db = { path = "../db", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0,<9.0"
+pytest-cov = ">=6.0,<8.0"
 ruff = ">=0.8,<1.0"
 
 [tool.pytest.ini_options]

@@ -5,6 +5,11 @@ serving it — ADR-0002) and defends against two live-verified backend behaviors
 asserts the returned dimensionality and re-normalizes if vectors ever stop arriving
 unit-length (gemini-embedding-001 proves Google ships both behaviors).
 
+LocalSentenceTransformerEmbedder runs a local text-only model (EmbeddingGemma,
+Phase 6.1) via sentence-transformers — no network, no billing. Queries and documents
+are encoded with DIFFERENT prompts: EmbeddingGemma is trained asymmetrically and
+retrieval quality depends on using the right prompt per side.
+
 FakeEmbedder is the deterministic offline stand-in for unit tests: same text always
 maps to the same unit vector, different texts to different ones.
 """
@@ -29,11 +34,31 @@ class EmbeddingError(RuntimeError):
 class EmbedderProtocol(Protocol):
     def embed_texts(self, texts: list[str]) -> list[list[float]]: ...
 
+    def embed_query(self, text: str) -> list[float]: ...
+
     def embed_image(self, data: bytes, mime_type: str) -> list[float]: ...
 
 
 def _l2_norm(vector: list[float]) -> float:
     return math.sqrt(sum(v * v for v in vector))
+
+
+def _validated(values: list[float], *, dimensions: int, model: str) -> list[float]:
+    """Dimension assertion + defensive re-normalization, shared by every real embedder."""
+    if len(values) != dimensions:
+        raise EmbeddingError(
+            f"{model} returned {len(values)} dimensions, expected "
+            f"{dimensions} — model or config changed; re-run verify-vertex "
+            "and check the embedding space registry."
+        )
+    norm = _l2_norm(values)
+    if abs(norm - 1.0) > 1e-3:
+        logger.warning(
+            "embedding not unit-length; normalizing client-side",
+            extra={"model": model, "norm": round(norm, 6)},
+        )
+        values = [v / norm for v in values]
+    return values
 
 
 class GeminiEmbedder:
@@ -66,6 +91,10 @@ class GeminiEmbedder:
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         return [self._embed_one(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        # gemini-embedding-2 is symmetric here: queries and documents share one encoding.
+        return self._embed_one(text)
 
     def embed_image(self, data: bytes, mime_type: str) -> list[float]:
         from google.genai import types
@@ -114,20 +143,70 @@ class GeminiEmbedder:
         )
 
     def _validated(self, values: list[float]) -> list[float]:
-        if len(values) != self._dimensions:
-            raise EmbeddingError(
-                f"{self._model} returned {len(values)} dimensions, expected "
-                f"{self._dimensions} — model or config changed; re-run verify-vertex "
-                "and check the embedding space registry."
+        return _validated(values, dimensions=self._dimensions, model=self._model)
+
+
+class LocalSentenceTransformerEmbedder:
+    """Text-only local embedder via sentence-transformers (EmbeddingGemma, Phase 6.1).
+
+    The model loads lazily on first use — constructing this class stays free of the
+    heavy optional dependency so components that never query the local space don't
+    need it installed. Images are rejected: text-only vectors belong to their own
+    space and must never be compared with the multimodal one.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        dimensions: int,
+        device: str = "cpu",
+        query_prompt_name: str = "query",
+        document_prompt_name: str = "document",
+        st_model: object | None = None,
+    ) -> None:
+        self._model_name = model
+        self._dimensions = dimensions
+        self._device = device
+        self._query_prompt_name = query_prompt_name
+        self._document_prompt_name = document_prompt_name
+        self._st_model = st_model
+
+    def _get_model(self):
+        if self._st_model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError as exc:
+                raise EmbeddingError(
+                    "sentence-transformers is not installed — install this component "
+                    "with its optional 'local' dependencies (poetry install --with local) "
+                    f"before using {self._model_name!r}."
+                ) from exc
+            self._st_model = SentenceTransformer(self._model_name, device=self._device)
+        return self._st_model
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return self._encode(texts, self._document_prompt_name)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._encode([text], self._query_prompt_name)[0]
+
+    def embed_image(self, data: bytes, mime_type: str) -> list[float]:
+        raise EmbeddingError(
+            f"{self._model_name} is text-only — images belong to the multimodal "
+            "space (ADR-0002), never to a text-only one."
+        )
+
+    def _encode(self, texts: list[str], prompt_name: str) -> list[list[float]]:
+        rows = self._get_model().encode(texts, prompt_name=prompt_name, normalize_embeddings=True)
+        return [
+            _validated(
+                [float(value) for value in row],
+                dimensions=self._dimensions,
+                model=self._model_name,
             )
-        norm = _l2_norm(values)
-        if abs(norm - 1.0) > 1e-3:
-            logger.warning(
-                "embedding not unit-length; normalizing client-side",
-                extra={"model": self._model, "norm": round(norm, 6)},
-            )
-            values = [v / norm for v in values]
-        return values
+            for row in rows
+        ]
 
 
 class FakeEmbedder:
@@ -138,6 +217,11 @@ class FakeEmbedder:
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         return [self._vector(text.encode("utf-8")) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        # Same vector as embed_texts for the same text: tests rely on query/document
+        # equality to construct exact matches.
+        return self._vector(text.encode("utf-8"))
 
     def embed_image(self, data: bytes, mime_type: str) -> list[float]:
         return self._vector(data)

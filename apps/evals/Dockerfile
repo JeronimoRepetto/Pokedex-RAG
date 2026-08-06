@@ -10,7 +10,9 @@ ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
 RUN pip install poetry==2.4.1
 
 WORKDIR /app
+# Keep in sync with the path dependencies in apps/evals/pyproject.toml.
 COPY libs/common /app/libs/common
+COPY libs/db /app/libs/db
 COPY apps/evals /app/apps/evals
 
 WORKDIR /app/apps/evals

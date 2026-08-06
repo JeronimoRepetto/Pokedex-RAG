@@ -8,10 +8,34 @@ Talks to `apps/api` only over HTTP — never imports it directly.
 ```bash
 evals list-cases [--suite text_retrieval] [--cases-dir cases]   # sanity-check case files, no API calls
 evals run [--suite text_retrieval] [--api-url http://localhost:8000] [--cases-dir cases]
+evals run --suite text_retrieval --space embeddinggemma-768-v1   # per-space comparison run
+evals run --fake-api                                # whole pipeline offline, no API, no cost
+evals compare [--suite rag_quality] [--providers a --providers b]   # score each provider
+evals report [--run-id N | --suite s] [--output path] [--git-sha sha]   # markdown report
+evals add-regression --answer-id <id> [--status ...] [--must-contain ...]   # promote a real /chat row
 ```
 
-`run` currently prints raw hits per case — scoring (Recall@k, MRR, nDCG) lands in
-Phase 5.2; this milestone (5.1) is the plumbing: cases, client, CLI.
+`run` scores each case (per-suite metrics: Recall@k/MRR/nDCG for retrieval, pass/fail
+assertions for rag_quality) and persists one `eval_runs` row per suite when
+`DATABASE_URL` is set. `--space` applies only to `text_retrieval` (combine with
+`--suite`); the label is recorded in the run summary so per-space results stay
+attributable — never compare scores across spaces as if they shared an index.
+
+`compare` sends each case's question to `POST /compare` once and scores every provider
+in the response separately, persisting one `eval_runs` row per provider. Because the API
+guarantees all providers saw the identical retrieved context, differences in the numbers
+are model differences.
+
+`report` renders one run as markdown: quality metrics from the run itself, plus latency
+p50/p95, tokens and cost per answer mined from the `rag_answers` rows written inside the
+run's time window. Costs come from `MODEL_PRICING_JSON`; a model missing from that table
+is reported as "cost unknown" rather than estimated.
+
+`--fake-api` swaps the HTTP client for a deterministic offline fake (`evals.fakes`). It
+proves the pipeline runs — cases parse, every suite branch executes, scoring and
+summaries compute — without a network, an API or any spend. Its responses are hash-derived,
+NOT taken from each case's `expected`, so the scores are arbitrary and a stubbed scorer
+cannot pass it. This is what CI's `pipeline-integrity` job runs.
 
 ## Run in dev
 

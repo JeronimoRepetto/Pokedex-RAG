@@ -148,7 +148,7 @@ class SearchService:
     def search_text(self, query: str, mode: str, limit: int) -> list[SearchHit]:
         if mode == "lexical":
             return self._repository.lexical_search(query, limit)
-        query_vector = self._embedder_instance().embed_texts([query])[0]
+        query_vector = self._embedder_instance().embed_query(query)
         if mode == "vector":
             return self._repository.vector_search(query_vector, limit)
         return self._fuse(
