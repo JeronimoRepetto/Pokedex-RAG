@@ -1,12 +1,13 @@
 """The RAG pipeline as a LangGraph graph.
 
     analyze_query → (retrieve_vector ∥ retrieve_lexical) → fuse_rrf
-                  → build_context → generate → finalize → validate
+                  → build_context → generate → finalize → validate → judge
+                  → (conditional: END | reformulate → generate | abstain → END)
 
 Dependencies (repository, embedder, gateway, document loader) are injected via
 `RagDeps` when the graph is built, so the whole graph runs on fakes in unit tests.
-Phase 4 added the provider-fallback branch; Phase 5.4 adds deterministic validation
-(still linear here — conditional judge/reformulate/abstain edges land in 5.5).
+Phase 4 added the provider-fallback branch; 5.4 added deterministic validation; 5.5
+adds the judge + its conditional reformulate/abstain routing.
 """
 
 import logging
@@ -18,6 +19,7 @@ from langgraph.graph import END, START, StateGraph
 
 from api.fusion import reciprocal_rank_fusion
 from api.rag.context import BuiltContext, ContextDocument, build_context
+from api.rag.judge import JudgeProtocol
 from api.rag.prompts import (
     INSUFFICIENT_EVIDENCE_SENTINEL,
     SYSTEM_PROMPT,
@@ -58,6 +60,8 @@ class RagDeps:
     provider_registry: ProviderRegistry | None = None  # resolves provider_override
     fallback_provider: str | None = None  # tried once if the default gateway errors
     type_lookup: PokemonTypeLookupProtocol | None = None  # Phase 5.4 factual cross-check
+    judge: JudgeProtocol | None = None  # Phase 5.5, a model DIFFERENT from `gateway`
+    max_attempts: int = 2  # reformulate loop bound
 
 
 def build_graph(deps: RagDeps):
@@ -124,15 +128,19 @@ def build_graph(deps: RagDeps):
             }
         override = state.get("provider_override")
         gateway = resolve_gateway(state)
+        user_content = USER_TEMPLATE.format(
+            context=context.text, question=state["normalized_question"]
+        )
+        if state.get("attempt", 1) > 1 and state.get("judge_reasoning"):
+            user_content += (
+                f"\n\nA fact-checker rejected your previous answer: "
+                f"{state['judge_reasoning']}. Answer again, more carefully, using ONLY "
+                "the context documents above."
+            )
         request = GenerationRequest(
             messages=[
                 Message(role="system", content=SYSTEM_PROMPT),
-                Message(
-                    role="user",
-                    content=USER_TEMPLATE.format(
-                        context=context.text, question=state["normalized_question"]
-                    ),
-                ),
+                Message(role="user", content=user_content),
             ],
             temperature=0.2,
             max_output_tokens=deps.max_output_tokens,
@@ -232,6 +240,48 @@ def build_graph(deps: RagDeps):
             "corrections_applied": len(corrections),
         }
 
+    def judge_node(state: RAGState) -> dict:
+        if state.get("status") not in ("answered", "corrected") or deps.judge is None:
+            return {}
+        context: BuiltContext = state["context"]
+        try:
+            verdict = deps.judge.judge(state["normalized_question"], state["answer"], context)
+        except Exception as exc:  # a broken judge must never take down /chat itself
+            logger.error("judge failed", extra={"error": str(exc)})
+            return {
+                "judge_grounded": True,
+                "warnings": [*state.get("warnings", []), f"judge failed, assuming grounded: {exc}"],
+            }
+        warnings = list(state.get("warnings", []))
+        if not verdict.grounded:
+            warnings.append(f"judge flagged ungrounded answer: {verdict.reasoning}")
+        return {
+            "judge_grounded": verdict.grounded,
+            "judge_reasoning": verdict.reasoning,
+            "warnings": warnings,
+        }
+
+    def route_after_judge(state: RAGState) -> str:
+        if deps.judge is None or state.get("judge_grounded", True):
+            return "end"
+        if state.get("attempt", 1) < deps.max_attempts:
+            return "reformulate"
+        return "abstain"
+
+    def reformulate(state: RAGState) -> dict:
+        return {"attempt": state.get("attempt", 1) + 1}
+
+    def abstain(state: RAGState) -> dict:
+        return {
+            "status": "insufficient_evidence",
+            "answer": None,
+            "citations": [],
+            "warnings": [
+                *state.get("warnings", []),
+                f"abstained after {state.get('attempt', 1)} attempt(s) rejected by the judge",
+            ],
+        }
+
     graph = StateGraph(RAGState)
     graph.add_node("analyze_query", analyze_query)
     graph.add_node("retrieve_vector", retrieve_vector)
@@ -241,6 +291,9 @@ def build_graph(deps: RagDeps):
     graph.add_node("generate", generate)
     graph.add_node("finalize", finalize)
     graph.add_node("validate", validate)
+    graph.add_node("judge", judge_node)
+    graph.add_node("reformulate", reformulate)
+    graph.add_node("abstain", abstain)
 
     graph.add_edge(START, "analyze_query")
     graph.add_edge("analyze_query", "retrieve_vector")
@@ -250,5 +303,10 @@ def build_graph(deps: RagDeps):
     graph.add_edge("build_context", "generate")
     graph.add_edge("generate", "finalize")
     graph.add_edge("finalize", "validate")
-    graph.add_edge("validate", END)
+    graph.add_edge("validate", "judge")
+    graph.add_conditional_edges(
+        "judge", route_after_judge, {"end": END, "reformulate": "reformulate", "abstain": "abstain"}
+    )
+    graph.add_edge("reformulate", "generate")
+    graph.add_edge("abstain", END)
     return graph.compile()

@@ -13,6 +13,7 @@ class RAGState(TypedDict, total=False):
     question: str
     limit: int
     provider_override: str | None  # manual-comparison override for /chat (Phase 4.1)
+    attempt: int  # generation attempt count, for the reformulate loop (Phase 5.5)
     # retrieval
     normalized_question: str
     vector_hits: list[SearchHit]
@@ -33,3 +34,5 @@ class RAGState(TypedDict, total=False):
     citations: list[dict[str, Any]]
     answer: str | None
     corrections_applied: int  # set by the validate node (Phase 5.4)
+    judge_grounded: bool
+    judge_reasoning: str

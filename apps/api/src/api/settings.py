@@ -37,3 +37,8 @@ class ApiSettings(BaseAppSettings):
     # instead of ADC; verified live against gemini-3.5-flash-lite, devlog 0024)
     ai_studio_api_key: str = ""
     ai_studio_model: str = "gemini-3.5-flash-lite"
+
+    # LLM judge (Phase 5.5): empty disables judging. Must resolve to a DIFFERENT
+    # provider than llm_primary — enforced at startup, not left to good intentions.
+    judge_provider: str = ""
+    max_reformulate_attempts: int = 2

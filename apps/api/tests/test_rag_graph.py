@@ -4,6 +4,7 @@ import pytest
 
 from api.rag.context import ContextDocument
 from api.rag.graph import RagDeps, build_graph
+from api.rag.judge import FakeJudge, JudgeVerdict
 from api.search import SearchHit
 from pokedex_embeddings import FakeEmbedder
 from pokedex_llm import FakeLLM, ProviderRegistry, TransientProviderError, UnknownProviderError
@@ -78,6 +79,8 @@ def run_graph(
     provider_override: str | None = None,
     fallback_provider: str | None = None,
     type_lookup=None,
+    judge=None,
+    max_attempts: int = 2,
 ) -> dict:
     repo = repo or FakeRepo()
     deps = RagDeps(
@@ -88,6 +91,8 @@ def run_graph(
         provider_registry=provider_registry,
         fallback_provider=fallback_provider,
         type_lookup=type_lookup,
+        judge=judge,
+        max_attempts=max_attempts,
     )
     return build_graph(deps).invoke(
         {"question": "  what type is   squirtle? ", "provider_override": provider_override}
@@ -272,3 +277,72 @@ def test_validate_is_a_noop_without_a_type_lookup_configured() -> None:
 
     assert state["status"] == "answered"
     assert state["answer"] == "Squirtle is a fire type Pokémon [1]."
+
+
+def test_no_judge_configured_skips_judging_entirely() -> None:
+    llm = FakeLLM(script=["Squirtle is a water type Pokémon [1]."])
+
+    state = run_graph(llm)  # judge=None, matches every test above this point
+
+    assert state["status"] == "answered"
+    assert state.get("judge_grounded") is None  # judge_node never ran
+    assert len(llm.requests) == 1
+
+
+def test_judge_grounded_on_the_first_try_ends_normally() -> None:
+    llm = FakeLLM(script=["Squirtle is a water type Pokémon [1]."])
+    judge = FakeJudge(
+        default=JudgeVerdict(grounded=True, hallucination_detected=False, reasoning="ok")
+    )
+
+    state = run_graph(llm, judge=judge)
+
+    assert state["status"] == "answered"
+    assert len(llm.requests) == 1
+    assert len(judge.calls) == 1
+
+
+def test_judge_rejects_then_reformulate_succeeds() -> None:
+    llm = FakeLLM(
+        script=["Squirtle is a fire type Pokémon [1].", "Squirtle is a water type Pokémon [1]."]
+    )
+    judge = FakeJudge(
+        script=[JudgeVerdict(grounded=False, hallucination_detected=True, reasoning="wrong type")],
+        default=JudgeVerdict(grounded=True, hallucination_detected=False, reasoning="ok now"),
+    )
+
+    state = run_graph(llm, judge=judge)
+
+    assert state["status"] == "answered"
+    assert state["answer"] == "Squirtle is a water type Pokémon [1]."
+    assert len(llm.requests) == 2
+    # the retry prompt carries the judge's feedback, not just the original question
+    assert "wrong type" in llm.requests[1].messages[-1].content
+
+
+def test_judge_rejects_every_attempt_and_abstains() -> None:
+    llm = FakeLLM(default_response="Squirtle is a fire type Pokémon [1].")
+    judge = FakeJudge(
+        default=JudgeVerdict(grounded=False, hallucination_detected=True, reasoning="still wrong")
+    )
+
+    state = run_graph(llm, judge=judge, max_attempts=2)
+
+    assert state["status"] == "insufficient_evidence"
+    assert state["answer"] is None
+    assert state["citations"] == []
+    assert any("abstained after 2 attempt(s)" in w for w in state["warnings"])
+    assert len(llm.requests) == 2  # bounded: exactly max_attempts, never unbounded
+
+
+def test_a_failing_judge_fails_open_instead_of_breaking_chat() -> None:
+    class BrokenJudge:
+        def judge(self, question, answer, context):
+            raise RuntimeError("judge provider down")
+
+    llm = FakeLLM(script=["Squirtle is a water type Pokémon [1]."])
+
+    state = run_graph(llm, judge=BrokenJudge())
+
+    assert state["status"] == "answered"  # never provider_error just because the judge broke
+    assert any("judge failed" in w for w in state["warnings"])

@@ -99,3 +99,37 @@ def test_both_providers_are_registered_at_startup(tmp_path) -> None:
         "ai-studio-gemini",
         "vertex-gemini",
     ]
+
+
+def test_startup_fails_fast_when_the_judge_is_an_unregistered_provider(tmp_path) -> None:
+    settings = ApiSettings(
+        database_url=f"sqlite+pysqlite:///{tmp_path}/api-test.db",
+        judge_provider="gemma",
+        _env_file=None,
+    )
+
+    with pytest.raises(ValueError, match="judge_provider"):
+        create_app(settings)
+
+
+def test_startup_fails_fast_when_the_judge_matches_the_generator(tmp_path) -> None:
+    settings = ApiSettings(
+        database_url=f"sqlite+pysqlite:///{tmp_path}/api-test.db",
+        judge_provider="vertex-gemini",  # same as the default llm_primary
+        _env_file=None,
+    )
+
+    with pytest.raises(ValueError, match="must differ"):
+        create_app(settings)
+
+
+def test_judge_is_wired_when_configured_with_a_different_provider(tmp_path) -> None:
+    settings = ApiSettings(
+        database_url=f"sqlite+pysqlite:///{tmp_path}/api-test.db",
+        judge_provider="ai-studio-gemini",
+        _env_file=None,
+    )
+
+    app = create_app(settings)
+
+    assert app.state.chat_service is not None  # graph built without raising
