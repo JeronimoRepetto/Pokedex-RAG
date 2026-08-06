@@ -241,6 +241,32 @@ class Embedding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class RagAnswer(Base):
+    """One /chat interaction: the mining ground for regression cases (Phase 5)."""
+
+    __tablename__ = "rag_answers"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    request_id: Mapped[str] = mapped_column(String(64), index=True)
+    question: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30))  # ResponseStatus values
+    answer: Mapped[str | None] = mapped_column(Text)
+    citations: Mapped[list] = mapped_column(JSONVariant, default=list)
+    confidence: Mapped[float | None] = mapped_column()
+    warnings: Mapped[list] = mapped_column(JSONVariant, default=list)
+    corrections_applied: Mapped[int] = mapped_column(Integer, default=0)
+    provider: Mapped[str | None] = mapped_column(String(50))
+    model: Mapped[str | None] = mapped_column(String(100))
+    prompt_version: Mapped[str | None] = mapped_column(String(50))
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    langfuse_trace_id: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Sprite(Base):
     """Manifest of downloaded sprite files. The image bytes live under data/ (never in
     git); this row records provenance and integrity."""
