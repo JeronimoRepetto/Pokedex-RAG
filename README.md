@@ -3,7 +3,6 @@
 Unofficial, educational project: a Pokédex you can search by text or image, backed by
 Retrieval-Augmented Generation over Gen-1 Pokémon data.
 
-- **API**: FastAPI (OpenAPI docs at `/docs`)
 - **Retrieval**: PostgreSQL + pgvector — multimodal embeddings + full-text search, fused with RRF
 - **Orchestration**: LangGraph
 - **Observability**: Langfuse
