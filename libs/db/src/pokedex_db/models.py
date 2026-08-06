@@ -265,6 +265,36 @@ class RagAnswer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class EvalRun(Base):
+    """One `evals run` invocation — the container for its per-case `EvalResult` rows."""
+
+    __tablename__ = "eval_runs"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    suite: Mapped[str] = mapped_column(String(50), index=True)
+    api_base_url: Mapped[str] = mapped_column(Text)
+    case_count: Mapped[int] = mapped_column(Integer)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSONVariant, default=dict)  # suite-level means
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EvalResult(Base):
+    """One golden case's score within one `EvalRun` — the mining ground for
+    Phase 5.7's regression capture (`evals add-regression --answer-id ...`)."""
+
+    __tablename__ = "eval_results"
+    __table_args__ = (UniqueConstraint("run_id", "case_id", name="uq_eval_results_run_case"),)
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("eval_runs.id"), index=True)
+    case_id: Mapped[str] = mapped_column(String(100), index=True)
+    retrieved_ids: Mapped[list] = mapped_column(JSONVariant, default=list)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSONVariant, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Sprite(Base):
     """Manifest of downloaded sprite files. The image bytes live under data/ (never in
     git); this row records provenance and integrity."""

@@ -17,7 +17,10 @@ class CaseScore:
     ndcg_at_k: float
 
 
-def score_text_retrieval(case: GoldenCase, retrieved_ids: list[int]) -> CaseScore:
+def score_case(case: GoldenCase, retrieved_ids: list[int]) -> CaseScore:
+    """Modality-agnostic: text_retrieval and visual_retrieval both resolve to a ranked
+    list of pokemon_ids, and relevance is judged the same way regardless of how the
+    ids were retrieved."""
     relevant = case.expected["relevant_pokemon_ids"]
     k = case.input.get("limit") or len(retrieved_ids) or 1
     return CaseScore(

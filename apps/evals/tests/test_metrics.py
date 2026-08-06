@@ -97,3 +97,11 @@ class TestNdcgAtK:
     def test_empty_relevant_set_raises(self) -> None:
         with pytest.raises(ValueError, match="relevant"):
             ndcg_at_k([1], [], k=3)
+
+    def test_never_exceeds_one_when_a_relevant_id_repeats_in_the_retrieved_list(self) -> None:
+        # Real bug, caught against live data (devlog 0028): search results are per
+        # document, and one Pokémon has several documents (card/flavor/moves/...), so
+        # the same relevant pokemon_id can legitimately appear more than once in a
+        # single result page. Each repeat must NOT add more credit than the first hit.
+        assert ndcg_at_k([1, 1, 2, 1, 1], [1], k=5) == pytest.approx(1.0)
+        assert ndcg_at_k([9, 1, 1, 1, 1], [1], k=5) <= 1.0 + 1e-9

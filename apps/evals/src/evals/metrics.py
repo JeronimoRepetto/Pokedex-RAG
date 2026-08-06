@@ -39,11 +39,17 @@ def top_1_hit(retrieved: list[int], relevant: list[int]) -> float:
 
 
 def _dcg_at_k(retrieved: list[int], relevant_set: set[int], k: int) -> float:
-    return sum(
-        1.0 / math.log2(rank + 1)
-        for rank, item in enumerate(retrieved[:k], start=1)
-        if item in relevant_set
-    )
+    # Each relevant id contributes at most once, at its best (earliest) rank — search
+    # results are per document, and one entity can have several documents, so the
+    # same relevant id can legitimately repeat in `retrieved`. Without deduplication
+    # a repeat would double-count and push nDCG above its defined [0, 1] range.
+    seen: set[int] = set()
+    dcg = 0.0
+    for rank, item in enumerate(retrieved[:k], start=1):
+        if item in relevant_set and item not in seen:
+            dcg += 1.0 / math.log2(rank + 1)
+            seen.add(item)
+    return dcg
 
 
 def ndcg_at_k(retrieved: list[int], relevant: list[int], k: int) -> float:

@@ -1,7 +1,11 @@
 """Thin httpx client over the Pokédex AI API — the only way this job touches the
 system under evaluation (never imports the api component directly)."""
 
+from pathlib import Path
+
 import httpx
+
+_IMAGE_CONTENT_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
 
 class ApiClient:
@@ -12,6 +16,19 @@ class ApiClient:
         response = self._client.post(
             "/search/text", json={"query": query, "mode": mode, "limit": limit}
         )
+        response.raise_for_status()
+        return response.json()
+
+    def search_image(self, image_path: Path, limit: int = 10) -> dict:
+        content_type = _IMAGE_CONTENT_TYPES.get(
+            image_path.suffix.lower(), "application/octet-stream"
+        )
+        with image_path.open("rb") as f:
+            response = self._client.post(
+                "/search/image",
+                files={"image": (image_path.name, f, content_type)},
+                params={"limit": limit},
+            )
         response.raise_for_status()
         return response.json()
 

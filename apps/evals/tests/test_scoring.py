@@ -1,7 +1,7 @@
 import pytest
 
 from evals.cases import GoldenCase
-from evals.scoring import score_text_retrieval, summarize
+from evals.scoring import score_case, summarize
 
 
 def make_case(limit: int = 5, relevant: list[int] | None = None) -> GoldenCase:
@@ -15,7 +15,7 @@ def make_case(limit: int = 5, relevant: list[int] | None = None) -> GoldenCase:
 
 
 def test_score_uses_the_case_limit_as_k() -> None:
-    score = score_text_retrieval(make_case(limit=2), retrieved_ids=[9, 9, 1])
+    score = score_case(make_case(limit=2), retrieved_ids=[9, 9, 1])
 
     assert score.recall_at_k == 0.0  # id 1 is at rank 3, outside k=2
     assert score.reciprocal_rank == pytest.approx(1 / 3)
@@ -24,7 +24,7 @@ def test_score_uses_the_case_limit_as_k() -> None:
 
 
 def test_score_perfect_hit_at_rank_one() -> None:
-    score = score_text_retrieval(make_case(), retrieved_ids=[1, 9, 9])
+    score = score_case(make_case(), retrieved_ids=[1, 9, 9])
 
     assert score.recall_at_k == 1.0
     assert score.reciprocal_rank == 1.0
@@ -41,14 +41,14 @@ def test_score_falls_back_to_retrieved_length_when_limit_missing() -> None:
         origin="handwritten",
     )
 
-    score = score_text_retrieval(case, retrieved_ids=[9, 1, 9])
+    score = score_case(case, retrieved_ids=[9, 1, 9])
 
     assert score.recall_at_k == 1.0  # k defaulted to len(retrieved) == 3
 
 
 def test_summarize_averages_every_metric_across_cases() -> None:
-    hit = score_text_retrieval(make_case(), retrieved_ids=[1])
-    miss = score_text_retrieval(make_case(), retrieved_ids=[9])
+    hit = score_case(make_case(), retrieved_ids=[1])
+    miss = score_case(make_case(), retrieved_ids=[9])
 
     summary = summarize([hit, miss])
 
