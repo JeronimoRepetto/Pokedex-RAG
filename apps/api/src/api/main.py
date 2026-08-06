@@ -109,8 +109,17 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             model=settings.generation_model,
         )
 
+    def ai_studio_gateway_factory():
+        from pokedex_llm import AiStudioGeminiAdapter
+
+        return AiStudioGeminiAdapter(
+            api_key=settings.ai_studio_api_key,
+            model=settings.ai_studio_model,
+        )
+
     provider_registry = ProviderRegistry()
     provider_registry.register("vertex-gemini", gateway_factory)
+    provider_registry.register("ai-studio-gemini", ai_studio_gateway_factory)
     # llm_fallback is optional (blank until a second provider is registered, Phase 4.2).
     for setting_name, provider_name, required in [
         ("llm_primary", settings.llm_primary, True),

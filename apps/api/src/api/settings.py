@@ -32,3 +32,8 @@ class ApiSettings(BaseAppSettings):
     # ProviderRegistry — checked at startup, not on first request.
     llm_primary: str = "vertex-gemini"
     llm_fallback: str = ""
+
+    # Google AI Studio (Phase 4.2: second provider, different auth path — API key
+    # instead of ADC; verified live against gemini-3.5-flash-lite, devlog 0024)
+    ai_studio_api_key: str = ""
+    ai_studio_model: str = "gemini-3.5-flash-lite"
