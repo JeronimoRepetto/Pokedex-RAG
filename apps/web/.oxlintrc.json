@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "unicorn", "jsx-a11y"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    // Next.js uses the automatic JSX runtime, so React needs no import to use JSX.
+    "react/react-in-jsx-scope": "off"
+  },
+  "env": { "browser": true, "es2024": true },
+  "ignorePatterns": [".next/**", "out/**", "node_modules/**"]
+}

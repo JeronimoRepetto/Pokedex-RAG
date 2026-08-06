@@ -90,7 +90,15 @@ Each component's README covers how to run, test and deploy it.
 | `apps/data-pipeline` | job | Ingest PokéAPI data, build documents, generate embeddings |
 | `apps/api` | service | Pokédex + search + RAG chat + provider comparison API |
 | `apps/evals` | job | Golden-dataset evaluation runner and report generator |
+| `apps/web` | frontend | Static Next.js UI over the public API (search, cards, chat, comparison) |
 | `libs/*` | libraries | Shared config/logging/contracts, DB models, embedders, LLM gateway |
+
+To run the UI, start the API with this origin allowed and point the app at it:
+
+```bash
+cd apps/api && CORS_ALLOWED_ORIGINS=http://localhost:3000 poetry run uvicorn api.main:app --factory --port 8000
+cd apps/web && cp .env.example .env.local && pnpm install && pnpm dev    # http://localhost:3000
+```
 
 ## Endpoints
 
@@ -100,6 +108,7 @@ Each component's README covers how to run, test and deploy it.
 | `GET /pokemon`, `/pokemon/{id_or_name}`, `/pokemon/{id}/evolution-chain` | Record cards |
 | `POST /search/text` | Vector / lexical / hybrid (RRF) search, optional `space` |
 | `POST /search/image` | Image-to-image match over sprite vectors |
+| `GET /pokemon/{id}/sprite` | Serves a downloaded sprite file (the UI's only image source) |
 | `POST /chat` | Grounded answer with citations, validated and judged |
 | `POST /compare` | Same context, N providers, each judged side by side |
 

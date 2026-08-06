@@ -6,7 +6,10 @@ export PATH := $(HOME)/.local/bin:$(PATH)
 
 COMPONENTS := libs/common libs/db libs/embeddings libs/llm-gateway apps/data-pipeline apps/api apps/evals
 
-.PHONY: up down ps logs lint format test check
+# apps/web is a Node component: pnpm, not Poetry, so it has its own targets.
+WEB := apps/web
+
+.PHONY: up down ps logs lint format test check web-dev web-lint web-test web-build
 
 up:
 	docker compose up -d
@@ -38,4 +41,17 @@ test:
 		(cd $$c && poetry run pytest -q); \
 	done
 
-check: lint test
+web-dev:
+	cd $(WEB) && pnpm dev
+
+web-lint:
+	cd $(WEB) && pnpm lint && pnpm format:check && pnpm typecheck
+
+web-test:
+	cd $(WEB) && pnpm test
+
+web-build:
+	cd $(WEB) && pnpm build
+
+# Everything: Python components plus the web app.
+check: lint test web-lint web-test

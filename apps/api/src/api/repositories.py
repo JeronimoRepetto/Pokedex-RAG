@@ -1,7 +1,7 @@
 """Read repositories. The router depends on the Protocol; the SQL implementation is
 bound at app startup and an in-memory fake serves the unit tests."""
 
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -29,6 +29,14 @@ from pokedex_db.models import (
 )
 
 
+class SpriteRef(NamedTuple):
+    """Where a sprite's bytes live on disk, relative to DATA_DIR."""
+
+    pokemon_id: int
+    kind: str
+    relative_path: str
+
+
 class PokemonReadRepository(Protocol):
     def list_pokemon(
         self, *, page: int, page_size: int, type_name: str | None, name_contains: str | None
@@ -37,6 +45,8 @@ class PokemonReadRepository(Protocol):
     def get_card(self, id_or_name: str) -> PokemonCard | None: ...
 
     def get_evolution_chain(self, id_or_name: str) -> EvolutionChainResponse | None: ...
+
+    def get_sprite(self, id_or_name: str, kind: str) -> SpriteRef | None: ...
 
 
 def _resolve_clause(id_or_name: str):
@@ -113,6 +123,20 @@ class SqlPokemonRepository:
                 flavor_text=flavor,
                 sprite_kinds=sprite_kinds,
             )
+
+    def get_sprite(self, id_or_name: str, kind: str) -> SpriteRef | None:
+        """Returns None when the Pokémon, the kind, or the downloaded file is missing —
+        the router turns all three into one 404, since to a caller they are the same
+        thing: no image to serve."""
+        with self._session_factory() as session:
+            row = session.execute(
+                select(Sprite.pokemon_id, Sprite.kind, Sprite.local_path)
+                .join(Pokemon, Pokemon.id == Sprite.pokemon_id)
+                .where(_resolve_clause(id_or_name), Sprite.kind == kind)
+            ).first()
+            if row is None or not row.local_path:
+                return None
+            return SpriteRef(pokemon_id=row.pokemon_id, kind=row.kind, relative_path=row.local_path)
 
     def get_evolution_chain(self, id_or_name: str) -> EvolutionChainResponse | None:
         with self._session_factory() as session:

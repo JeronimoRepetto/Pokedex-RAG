@@ -55,5 +55,18 @@ class ApiSettings(BaseAppSettings):
     # setting it a required step. Never logged; /health stays public for health checks.
     api_keys: str = ""
 
+    # Sprite files live here (same DATA_DIR the pipeline downloads into); the
+    # /pokemon/{id}/sprite endpoint reads from it.
+    data_dir: str = "data"
+
+    # CORS (Phase 7): comma-separated origin allowlist for the browser UI. Empty means
+    # no browser origin is allowed — CORS stays off rather than defaulting to a
+    # wildcard, which the guidelines forbid in production.
+    cors_allowed_origins: str = ""
+
     def parsed_api_keys(self) -> frozenset[str]:
         return frozenset(key.strip() for key in self.api_keys.split(",") if key.strip())
+
+    def parsed_cors_origins(self) -> list[str]:
+        origins = [origin.strip() for origin in self.cors_allowed_origins.split(",")]
+        return [origin for origin in origins if origin and origin != "*"]

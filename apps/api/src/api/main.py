@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from api.health import router as health_router
 from api.middleware import ApiKeyMiddleware, RequestIdMiddleware
@@ -209,10 +210,22 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         judge_provider=settings.judge_provider or None,
     )
 
-    # Order matters: middleware added last runs first, so the request id exists before
-    # the API-key gate can reject anything (a 401 must still be traceable).
+    # Order matters: middleware added last runs first. CORS must be outermost so even
+    # a 401 from the API-key gate carries the CORS headers a browser needs to read it;
+    # the request id is generated before the gate so a rejection stays traceable.
     app.add_middleware(ApiKeyMiddleware, api_keys=settings.parsed_api_keys())
     app.add_middleware(RequestIdMiddleware)
+    cors_origins = settings.parsed_cors_origins()
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,  # explicit allowlist; never a wildcard
+            allow_credentials=False,  # the UI authenticates with a header, not cookies
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type", "X-API-Key", "X-Request-ID"],
+            expose_headers=["X-Request-ID"],
+            max_age=600,
+        )
     app.include_router(health_router)
     app.include_router(pokemon_router)
     app.include_router(search_router)

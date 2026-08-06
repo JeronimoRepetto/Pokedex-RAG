@@ -11,5 +11,10 @@ indent_size = 4
 [*.{yml,yaml,json,toml,md}]
 indent_size = 2
 
+# The 4-space default above is the Python convention (ruff). The JS/TS ecosystem uses
+# 2, and Prettier reads this file, so apps/web is formatted from here too.
+[*.{ts,tsx,js,jsx,mjs,cjs,css}]
+indent_size = 2
+
 [Makefile]
 indent_style = tab
