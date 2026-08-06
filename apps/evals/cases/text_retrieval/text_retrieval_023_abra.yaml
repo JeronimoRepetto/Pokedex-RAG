@@ -1,0 +1,9 @@
+case_id: text_retrieval_023
+suite: text_retrieval
+input:
+  query: "tell me about abra"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [63]
+origin: handwritten

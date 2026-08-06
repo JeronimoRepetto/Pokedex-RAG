@@ -1,0 +1,9 @@
+case_id: text_retrieval_019
+suite: text_retrieval
+input:
+  query: "tell me about psyduck"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [54]
+origin: handwritten

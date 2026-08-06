@@ -1,0 +1,9 @@
+case_id: text_retrieval_029
+suite: text_retrieval
+input:
+  query: "describe magikarp"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [129]
+origin: handwritten

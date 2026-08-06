@@ -1,0 +1,9 @@
+case_id: text_retrieval_030
+suite: text_retrieval
+input:
+  query: "what is porygon"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [137]
+origin: handwritten

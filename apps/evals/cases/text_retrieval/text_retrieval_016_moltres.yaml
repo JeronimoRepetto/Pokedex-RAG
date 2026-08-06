@@ -1,0 +1,9 @@
+case_id: text_retrieval_016
+suite: text_retrieval
+input:
+  query: "tell me about moltres"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [146]
+origin: handwritten

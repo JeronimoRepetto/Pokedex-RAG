@@ -1,0 +1,9 @@
+case_id: text_retrieval_003
+suite: text_retrieval
+input:
+  query: "what type is squirtle"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [7]
+origin: handwritten

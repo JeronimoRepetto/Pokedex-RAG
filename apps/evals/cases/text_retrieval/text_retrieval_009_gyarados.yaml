@@ -1,0 +1,9 @@
+case_id: text_retrieval_009
+suite: text_retrieval
+input:
+  query: "what type is gyarados"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [130]
+origin: handwritten

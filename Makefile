@@ -4,7 +4,7 @@
 # Poetry lives in ~/.local/bin, which Git Bash doesn't always inherit on Windows.
 export PATH := $(HOME)/.local/bin:$(PATH)
 
-COMPONENTS := libs/common libs/db libs/embeddings libs/llm-gateway apps/data-pipeline apps/api
+COMPONENTS := libs/common libs/db libs/embeddings libs/llm-gateway apps/data-pipeline apps/api apps/evals
 
 .PHONY: up down ps logs lint format test check
 

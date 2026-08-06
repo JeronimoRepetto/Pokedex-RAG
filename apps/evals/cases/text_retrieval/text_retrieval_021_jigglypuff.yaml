@@ -1,0 +1,9 @@
+case_id: text_retrieval_021
+suite: text_retrieval
+input:
+  query: "describe jigglypuff"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [39]
+origin: handwritten

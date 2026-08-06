@@ -1,0 +1,9 @@
+case_id: text_retrieval_005
+suite: text_retrieval
+input:
+  query: "what type is charizard"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [6]
+origin: handwritten

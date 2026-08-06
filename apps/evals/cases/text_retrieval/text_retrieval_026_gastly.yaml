@@ -1,0 +1,9 @@
+case_id: text_retrieval_026
+suite: text_retrieval
+input:
+  query: "what type is gastly"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [92]
+origin: handwritten

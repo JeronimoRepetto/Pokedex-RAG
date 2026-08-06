@@ -18,6 +18,7 @@ jobs:
           - libs/llm-gateway
           - apps/data-pipeline
           - apps/api
+          - apps/evals
     defaults:
       run:
         working-directory: ${{ matrix.component }}
