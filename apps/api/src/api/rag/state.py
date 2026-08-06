@@ -12,6 +12,7 @@ class RAGState(TypedDict, total=False):
     request_id: str
     question: str
     limit: int
+    provider_override: str | None  # manual-comparison override for /chat (Phase 4.1)
     # retrieval
     normalized_question: str
     vector_hits: list[SearchHit]

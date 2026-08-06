@@ -1,10 +1,12 @@
 """Full-graph unit tests on fakes: every Phase-3 route through the linear pipeline."""
 
+import pytest
+
 from api.rag.context import ContextDocument
 from api.rag.graph import RagDeps, build_graph
 from api.search import SearchHit
 from pokedex_embeddings import FakeEmbedder
-from pokedex_llm import FakeLLM, TransientProviderError
+from pokedex_llm import FakeLLM, ProviderRegistry, TransientProviderError, UnknownProviderError
 
 CARD = ContextDocument(
     document_id=1,
@@ -58,15 +60,25 @@ class FakeLoader:
         return {d.document_id: d for d in (CARD, FLAVOR) if d.document_id in document_ids}
 
 
-def run_graph(llm: FakeLLM, repo: FakeRepo | None = None) -> dict:
+def run_graph(
+    llm: FakeLLM,
+    repo: FakeRepo | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    provider_override: str | None = None,
+    fallback_provider: str | None = None,
+) -> dict:
     repo = repo or FakeRepo()
     deps = RagDeps(
         repository=repo,
         embedder=FakeEmbedder(dimensions=8),
         gateway=llm,
         document_loader=FakeLoader(),
+        provider_registry=provider_registry,
+        fallback_provider=fallback_provider,
     )
-    return build_graph(deps).invoke({"question": "  what type is   squirtle? "})
+    return build_graph(deps).invoke(
+        {"question": "  what type is   squirtle? ", "provider_override": provider_override}
+    )
 
 
 def test_happy_path_answers_with_citations() -> None:
@@ -136,3 +148,82 @@ def test_invalid_citation_markers_are_flagged() -> None:
     assert state["citations"] == []
     assert any("unknown documents" in w for w in state["warnings"])
     assert any("no valid citations" in w for w in state["warnings"])
+
+
+def test_provider_override_routes_through_the_registry_instead_of_the_default() -> None:
+    default_llm = FakeLLM(provider="default", script=["should not be called"])
+    override_llm = FakeLLM(provider="override", script=["Answer from the override [1]."])
+    registry = ProviderRegistry()
+    registry.register("override", lambda: override_llm)
+
+    state = run_graph(default_llm, provider_registry=registry, provider_override="override")
+
+    assert state["status"] == "answered"
+    assert state["provider"] == "override"
+    assert default_llm.requests == []
+    assert override_llm.requests
+
+
+def test_provider_override_without_a_registry_fails_fast() -> None:
+    with pytest.raises(UnknownProviderError, match="no registry"):
+        run_graph(FakeLLM(), provider_override="gemma")
+
+
+def test_unregistered_provider_override_fails_fast() -> None:
+    with pytest.raises(UnknownProviderError, match="gemma"):
+        run_graph(FakeLLM(), provider_registry=ProviderRegistry(), provider_override="gemma")
+
+
+def test_primary_failure_falls_back_once_and_answers() -> None:
+    primary = FakeLLM(provider="primary", script=[TransientProviderError("503 from primary")])
+    fallback = FakeLLM(provider="fallback", script=["Fallback answer [1]."])
+    registry = ProviderRegistry()
+    registry.register("fallback", lambda: fallback)
+
+    state = run_graph(primary, provider_registry=registry, fallback_provider="fallback")
+
+    assert state["status"] == "answered"
+    assert state["provider"] == "fallback"
+    assert any("falling back" in w for w in state["warnings"])
+
+
+def test_primary_and_fallback_both_failing_returns_provider_error() -> None:
+    primary = FakeLLM(provider="primary", script=[TransientProviderError("primary down")])
+    fallback = FakeLLM(provider="fallback", script=[TransientProviderError("fallback down too")])
+    registry = ProviderRegistry()
+    registry.register("fallback", lambda: fallback)
+
+    state = run_graph(primary, provider_registry=registry, fallback_provider="fallback")
+
+    assert state["status"] == "provider_error"
+    assert state["answer"] is None
+    assert any("falling back" in w for w in state["warnings"])
+    assert any("fallback also failed" in w for w in state["warnings"])
+
+
+def test_primary_failure_without_a_configured_fallback_still_errors_immediately() -> None:
+    primary = FakeLLM(script=[TransientProviderError("gave up after 3 attempts")])
+
+    state = run_graph(primary)  # no fallback_provider, matches the pre-4.4 behavior
+
+    assert state["status"] == "provider_error"
+    assert not any("falling back" in w for w in state["warnings"])
+
+
+def test_provider_override_does_not_trigger_the_automatic_fallback() -> None:
+    override_llm = FakeLLM(provider="override", script=[TransientProviderError("override down")])
+    fallback = FakeLLM(provider="fallback", script=["should not be called"])
+    registry = ProviderRegistry()
+    registry.register("override", lambda: override_llm)
+    registry.register("fallback", lambda: fallback)
+
+    state = run_graph(
+        FakeLLM(),
+        provider_registry=registry,
+        provider_override="override",
+        fallback_provider="fallback",
+    )
+
+    assert state["status"] == "provider_error"
+    assert state["provider"] == "override"
+    assert fallback.requests == []

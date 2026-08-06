@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from pokedex_llm import VertexGeminiAdapter
+from pokedex_llm import AiStudioGeminiAdapter, VertexGeminiAdapter
 from pokedex_llm.contract import GatewayContract
 
 pytestmark = [
@@ -26,4 +26,13 @@ class TestVertexGeminiContract(GatewayContract):
             project=os.environ.get("GCP_PROJECT_ID", "pokedex-rag-504617"),
             location=os.environ.get("GENERATION_LOCATION", "global"),
             model=os.environ.get("GENERATION_MODEL", "gemini-3.6-flash"),
+        )
+
+
+class TestAiStudioGeminiContract(GatewayContract):
+    @pytest.fixture
+    def gateway(self) -> AiStudioGeminiAdapter:
+        return AiStudioGeminiAdapter(
+            api_key=os.environ["AI_STUDIO_API_KEY"],
+            model=os.environ.get("AI_STUDIO_MODEL", "gemini-3.5-flash-lite"),
         )

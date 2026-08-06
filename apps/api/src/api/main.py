@@ -14,6 +14,7 @@ from api.settings import ApiSettings
 from pokedex_common.logging import configure_logging
 from pokedex_db.engine import create_db_engine, create_session_factory
 from pokedex_embeddings import SpaceConfig
+from pokedex_llm import ProviderRegistry
 
 
 class _LazyEmbedder:
@@ -108,11 +109,38 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             model=settings.generation_model,
         )
 
+    def ai_studio_gateway_factory():
+        from pokedex_llm import AiStudioGeminiAdapter
+
+        return AiStudioGeminiAdapter(
+            api_key=settings.ai_studio_api_key,
+            model=settings.ai_studio_model,
+        )
+
+    provider_registry = ProviderRegistry()
+    provider_registry.register("vertex-gemini", gateway_factory)
+    provider_registry.register("ai-studio-gemini", ai_studio_gateway_factory)
+    # llm_fallback is optional (blank until a second provider is registered, Phase 4.2).
+    for setting_name, provider_name, required in [
+        ("llm_primary", settings.llm_primary, True),
+        ("llm_fallback", settings.llm_fallback, False),
+    ]:
+        if not provider_name and not required:
+            continue
+        if provider_name not in provider_registry.known_providers():
+            raise ValueError(
+                f"{setting_name}={provider_name!r} is not a registered provider; "
+                f"known: {provider_registry.known_providers()}"
+            )
+    app.state.provider_registry = provider_registry
+
     rag_deps = RagDeps(
         repository=search_repository,
         embedder=_LazyEmbedder(embedder_factory),
-        gateway=_LazyGateway(gateway_factory),
+        gateway=_LazyGateway(lambda: provider_registry.build(settings.llm_primary)),
         document_loader=SqlDocumentLoader(app.state.session_factory),
+        provider_registry=provider_registry,
+        fallback_provider=settings.llm_fallback or None,
     )
     from api.rag.tracing import Tracing
 

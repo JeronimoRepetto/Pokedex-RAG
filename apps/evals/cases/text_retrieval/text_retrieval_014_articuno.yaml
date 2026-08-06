@@ -1,0 +1,9 @@
+case_id: text_retrieval_014
+suite: text_retrieval
+input:
+  query: "describe articuno"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [144]
+origin: handwritten

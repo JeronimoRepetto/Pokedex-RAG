@@ -73,3 +73,29 @@ def test_openapi_docs_are_served(tmp_path) -> None:
 
     assert client.get("/openapi.json").status_code == 200
     assert "educational" in client.get("/openapi.json").json()["info"]["description"]
+
+
+def test_startup_fails_fast_on_an_unregistered_primary_provider(tmp_path) -> None:
+    settings = ApiSettings(
+        database_url=f"sqlite+pysqlite:///{tmp_path}/api-test.db",
+        llm_primary="gemma",
+        _env_file=None,
+    )
+
+    with pytest.raises(ValueError, match="llm_primary"):
+        create_app(settings)
+
+
+def test_both_providers_are_registered_at_startup(tmp_path) -> None:
+    settings = ApiSettings(
+        database_url=f"sqlite+pysqlite:///{tmp_path}/api-test.db",
+        llm_fallback="ai-studio-gemini",
+        _env_file=None,
+    )
+
+    app = create_app(settings)
+
+    assert app.state.provider_registry.known_providers() == [
+        "ai-studio-gemini",
+        "vertex-gemini",
+    ]

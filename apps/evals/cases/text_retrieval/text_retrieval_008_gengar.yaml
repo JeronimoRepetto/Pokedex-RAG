@@ -1,0 +1,9 @@
+case_id: text_retrieval_008
+suite: text_retrieval
+input:
+  query: "tell me about gengar"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [94]
+origin: handwritten

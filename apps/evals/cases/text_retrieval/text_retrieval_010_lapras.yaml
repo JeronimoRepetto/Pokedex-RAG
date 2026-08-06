@@ -1,0 +1,9 @@
+case_id: text_retrieval_010
+suite: text_retrieval
+input:
+  query: "describe lapras"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [131]
+origin: handwritten

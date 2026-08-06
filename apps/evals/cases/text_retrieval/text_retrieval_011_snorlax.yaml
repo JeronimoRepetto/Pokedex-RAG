@@ -1,0 +1,9 @@
+case_id: text_retrieval_011
+suite: text_retrieval
+input:
+  query: "what does snorlax do"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [143]
+origin: handwritten

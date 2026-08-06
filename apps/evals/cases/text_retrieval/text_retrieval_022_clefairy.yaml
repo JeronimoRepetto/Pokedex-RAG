@@ -1,0 +1,9 @@
+case_id: text_retrieval_022
+suite: text_retrieval
+input:
+  query: "what type is clefairy"
+  mode: hybrid
+  limit: 5
+expected:
+  relevant_pokemon_ids: [35]
+origin: handwritten
