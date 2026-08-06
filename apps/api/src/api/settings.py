@@ -19,6 +19,13 @@ class ApiSettings(BaseAppSettings):
     embedding_dimensions: int = 768
     embedding_space_label: str = ""
 
+    # Local embeddings (Phase 6.1: EmbeddingGemma baseline). Empty label = the extra
+    # space is not registered and /search/text only accepts the primary one. Requires
+    # the optional "local" dependency group (sentence-transformers) at query time.
+    local_embedding_model: str = ""
+    local_embedding_dimensions: int = 768
+    local_embedding_space_label: str = ""
+
     # Generation (live-verified: gemini-3.6-flash serves from "global")
     generation_model: str = ""
     generation_location: str = ""

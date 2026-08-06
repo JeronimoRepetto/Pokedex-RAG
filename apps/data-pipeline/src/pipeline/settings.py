@@ -25,3 +25,9 @@ class PipelineSettings(BaseAppSettings):
     embedding_location: str = ""
     embedding_dimensions: int = 768
     embedding_space_label: str = ""
+
+    # Local embeddings (Phase 6.1: EmbeddingGemma baseline — text-only, runs on this
+    # machine via sentence-transformers; install the optional "local" group first)
+    local_embedding_model: str = ""
+    local_embedding_dimensions: int = 768
+    local_embedding_space_label: str = ""

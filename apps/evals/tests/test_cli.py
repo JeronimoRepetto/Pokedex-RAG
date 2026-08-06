@@ -66,6 +66,79 @@ def test_run_calls_the_api_and_reports_hits(tmp_path) -> None:
     assert "ran 1 case(s)" in result.output
 
 
+@respx.mock
+def test_run_passes_the_space_through_to_the_api(tmp_path) -> None:
+    write_case(tmp_path, "text_retrieval_001")
+    route = respx.post(f"{BASE}/search/text").respond(
+        json={"mode": "hybrid", "results": [{"pokemon_id": 1, "score": 0.9}]}
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--cases-dir",
+            str(tmp_path),
+            "--api-url",
+            BASE,
+            "--space",
+            "embeddinggemma-768-v1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    import json
+
+    sent = json.loads(route.calls[0].request.content)
+    assert sent["space"] == "embeddinggemma-768-v1"
+
+
+@respx.mock
+def test_run_omits_the_space_field_by_default(tmp_path) -> None:
+    """No --space -> the request must not carry the key at all: the API's primary
+    space stays an API-side decision, not an evals-side default."""
+    write_case(tmp_path, "text_retrieval_001")
+    route = respx.post(f"{BASE}/search/text").respond(
+        json={"mode": "hybrid", "results": [{"pokemon_id": 1, "score": 0.9}]}
+    )
+
+    result = runner.invoke(app, ["run", "--cases-dir", str(tmp_path), "--api-url", BASE])
+
+    assert result.exit_code == 0
+    import json
+
+    assert "space" not in json.loads(route.calls[0].request.content)
+
+
+def test_run_rejects_space_for_non_text_retrieval_suites(tmp_path) -> None:
+    (tmp_path / "rag_quality_001.yaml").write_text(
+        """case_id: rag_quality_001
+suite: rag_quality
+input:
+  question: "what type is bulbasaur?"
+expected:
+  status: answered
+  must_contain: [grass]
+origin: handwritten
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--cases-dir",
+            str(tmp_path),
+            "--space",
+            "embeddinggemma-768-v1",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--space only applies to text_retrieval" in result.output
+
+
 def make_sqlite_url_with_answer(tmp_path, question: str) -> str:
     url = f"sqlite+pysqlite:///{tmp_path}/regress.db"
     engine = create_db_engine(url)

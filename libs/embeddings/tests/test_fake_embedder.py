@@ -30,6 +30,14 @@ def test_different_inputs_give_different_vectors() -> None:
     assert abs(cosine(a, b)) < 0.5  # sha256-seeded vectors are near-orthogonal
 
 
+def test_query_embedding_matches_document_embedding_of_the_same_text() -> None:
+    """Search tests build exact matches by embedding the same text on both sides —
+    embed_query must stay consistent with embed_texts for that to keep working."""
+    embedder = FakeEmbedder(dimensions=64)
+
+    assert embedder.embed_query("pikachu") == embedder.embed_texts(["pikachu"])[0]
+
+
 def test_image_embedding_is_deterministic_and_distinct_from_text() -> None:
     embedder = FakeEmbedder(dimensions=64)
 

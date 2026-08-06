@@ -1,10 +1,11 @@
-"""Embedding layer: protocol, Gemini + fake implementations, space verification."""
+"""Embedding layer: protocol, Gemini + local + fake implementations, space verification."""
 
 from pokedex_embeddings.embedder import (
     EmbedderProtocol,
     EmbeddingError,
     FakeEmbedder,
     GeminiEmbedder,
+    LocalSentenceTransformerEmbedder,
 )
 from pokedex_embeddings.spaces import SpaceConfig, SpaceMismatchError, verify_embedding_space
 
@@ -13,6 +14,7 @@ __all__ = [
     "EmbeddingError",
     "FakeEmbedder",
     "GeminiEmbedder",
+    "LocalSentenceTransformerEmbedder",
     "SpaceConfig",
     "SpaceMismatchError",
     "verify_embedding_space",

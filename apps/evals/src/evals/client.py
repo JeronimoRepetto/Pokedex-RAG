@@ -12,10 +12,13 @@ class ApiClient:
     def __init__(self, base_url: str, timeout: float = 30.0) -> None:
         self._client = httpx.Client(base_url=base_url, timeout=timeout)
 
-    def search_text(self, query: str, mode: str = "hybrid", limit: int = 10) -> dict:
-        response = self._client.post(
-            "/search/text", json={"query": query, "mode": mode, "limit": limit}
-        )
+    def search_text(
+        self, query: str, mode: str = "hybrid", limit: int = 10, space: str | None = None
+    ) -> dict:
+        body = {"query": query, "mode": mode, "limit": limit}
+        if space is not None:
+            body["space"] = space
+        response = self._client.post("/search/text", json=body)
         response.raise_for_status()
         return response.json()
 

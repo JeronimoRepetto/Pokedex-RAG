@@ -69,7 +69,7 @@ def build_graph(deps: RagDeps):
         return {"normalized_question": " ".join(state["question"].split())}
 
     def retrieve_vector(state: RAGState) -> dict:
-        vector = deps.embedder.embed_texts([state["normalized_question"]])[0]
+        vector = deps.embedder.embed_query(state["normalized_question"])
         return {"vector_hits": deps.repository.vector_search(vector, deps.retrieval_limit)}
 
     def retrieve_lexical(state: RAGState) -> dict:

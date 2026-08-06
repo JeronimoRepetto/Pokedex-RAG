@@ -35,6 +35,9 @@ class _LazyEmbedder:
     def embed_texts(self, texts):
         return self._get().embed_texts(texts)
 
+    def embed_query(self, text):
+        return self._get().embed_query(text)
+
     def embed_image(self, data, mime_type):
         return self._get().embed_image(data, mime_type)
 
@@ -101,6 +104,33 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
 
     search_repository = SqlSearchRepository(app.state.session_factory, space)
     app.state.search_service = SearchService(search_repository, embedder_factory)
+
+    # Space registry for /search/text's optional `space` parameter (Phase 6.1): one
+    # service per label, each bound to its own repository + embedder — requests resolve
+    # exactly one space, never a mix. The default label maps to the same instance as
+    # app.state.search_service.
+    app.state.search_services = {settings.embedding_space_label: app.state.search_service}
+    if settings.local_embedding_space_label:
+
+        def local_embedder_factory():
+            # Lazy like the Gemini factory: sentence-transformers (optional "local"
+            # group) is only imported if this space is actually queried.
+            from pokedex_embeddings import LocalSentenceTransformerEmbedder
+
+            return LocalSentenceTransformerEmbedder(
+                model=settings.local_embedding_model,
+                dimensions=settings.local_embedding_dimensions,
+            )
+
+        local_space = SpaceConfig(
+            label=settings.local_embedding_space_label,
+            model_name=settings.local_embedding_model,
+            dimensions=settings.local_embedding_dimensions,
+        )
+        app.state.search_services[settings.local_embedding_space_label] = SearchService(
+            SqlSearchRepository(app.state.session_factory, local_space),
+            local_embedder_factory,
+        )
 
     def gateway_factory():
         from pokedex_llm import VertexGeminiAdapter

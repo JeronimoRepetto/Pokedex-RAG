@@ -75,6 +75,37 @@ def test_openapi_docs_are_served(tmp_path) -> None:
     assert "educational" in client.get("/openapi.json").json()["info"]["description"]
 
 
+def test_only_the_primary_space_is_registered_by_default(tmp_path) -> None:
+    settings = ApiSettings(
+        database_url=f"sqlite+pysqlite:///{tmp_path}/api-test.db",
+        embedding_space_label="gemini-embedding-2-768-v1",
+        _env_file=None,
+    )
+
+    app = create_app(settings)
+
+    assert set(app.state.search_services) == {"gemini-embedding-2-768-v1"}
+    assert app.state.search_services["gemini-embedding-2-768-v1"] is app.state.search_service
+
+
+def test_local_space_is_registered_when_configured(tmp_path) -> None:
+    settings = ApiSettings(
+        database_url=f"sqlite+pysqlite:///{tmp_path}/api-test.db",
+        embedding_space_label="gemini-embedding-2-768-v1",
+        local_embedding_model="google/embeddinggemma-300m",
+        local_embedding_space_label="embeddinggemma-768-v1",
+        _env_file=None,
+    )
+
+    app = create_app(settings)
+
+    assert set(app.state.search_services) == {
+        "gemini-embedding-2-768-v1",
+        "embeddinggemma-768-v1",
+    }
+    assert app.state.search_services["embeddinggemma-768-v1"] is not app.state.search_service
+
+
 def test_startup_fails_fast_on_an_unregistered_primary_provider(tmp_path) -> None:
     settings = ApiSettings(
         database_url=f"sqlite+pysqlite:///{tmp_path}/api-test.db",

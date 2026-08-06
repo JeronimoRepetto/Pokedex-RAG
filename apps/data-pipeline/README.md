@@ -8,8 +8,18 @@ building and embedding generation (subcommands land phase by phase).
 ```bash
 pipeline db upgrade        # apply Alembic migrations (lineage lives in libs/db)
 pipeline db current        # show current revision
+pipeline ingest --generation 1   # fetch-once PokéAPI ingest (throttled)
+pipeline build-docs        # deterministic RAG documents from domain rows
+pipeline sprites           # download sprite files (idempotent)
+pipeline embed [--sprites] # embed into the primary (Gemini) space — paid API
+pipeline embed --space embeddinggemma-768-v1   # embed into the local text-only space
 pipeline status            # row counts for known tables
 ```
+
+`embed --space` targets exactly one configured space per run; `--sprites` is rejected
+for text-only spaces. The local space needs the optional dependency group first:
+`poetry install --with local` (sentence-transformers, pulls torch), plus a Hugging
+Face login with the model's license accepted.
 
 ## Run in dev
 

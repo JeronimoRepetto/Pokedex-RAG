@@ -20,8 +20,11 @@ is touched.
 
 - `GET /health` — 200/503 with per-dependency detail (database).
 - `GET /pokemon`, `GET /pokemon/{id_or_name}`, `GET /pokemon/{id}/evolution-chain`.
-- `POST /search/text` — `{query, mode: vector|lexical|hybrid, limit}`; hybrid fuses the
-  HNSW vector leg and the tsvector lexical leg with RRF.
+- `POST /search/text` — `{query, mode: vector|lexical|hybrid, limit, space?}`; hybrid
+  fuses the HNSW vector leg and the tsvector lexical leg with RRF. `space` selects an
+  embedding space registered at startup (allowlist; 422 otherwise) — omit for the
+  primary Gemini space. The local space (`LOCAL_EMBEDDING_*`, Phase 6.1) additionally
+  needs `poetry install --with local`; without it that space answers 503.
 - `POST /search/image` — multipart image → image-to-image match over sprite vectors.
 - `POST /chat` — `{question, provider?}` → grounded answer with `[n]` citations
   resolved to source documents (see `pokedex_common.contracts.RAGResponse`); persists to

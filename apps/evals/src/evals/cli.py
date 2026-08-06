@@ -42,10 +42,10 @@ def list_cases(
     typer.echo(f"total: {len(cases)}")
 
 
-def _run_one_case(case, client: ApiClient, data_dir: Path):
+def _run_one_case(case, client: ApiClient, data_dir: Path, space: str | None = None):
     """Returns (score, echo_line) or raises for an unsupported suite."""
     if case.suite == "text_retrieval":
-        result = client.search_text(**case.input)
+        result = client.search_text(**case.input, space=space)
         hit_ids = [r["pokemon_id"] for r in result["results"]]
         score = score_case(case, hit_ids)
         return score, (
@@ -82,6 +82,13 @@ def run(
     cases_dir: Annotated[
         Path | None, typer.Option(help="Override the configured cases directory")
     ] = None,
+    space: Annotated[
+        str | None,
+        typer.Option(
+            help="Embedding space label for text_retrieval cases (per-space comparison "
+            "runs, Phase 6.1); omit for the API's primary space"
+        ),
+    ] = None,
 ) -> None:
     """Run golden cases against the live API, score them (per-suite metrics), and
     persist one eval_run per suite if DATABASE_URL is configured."""
@@ -91,6 +98,12 @@ def run(
     if not cases:
         typer.echo(f"no cases found under {directory} (suite={suite!r})")
         raise typer.Exit(code=1)
+    if space and any(case.suite != "text_retrieval" for case in cases):
+        typer.echo(
+            "--space only applies to text_retrieval cases (other suites have no space "
+            "parameter) — combine it with --suite text_retrieval"
+        )
+        raise typer.Exit(code=1)
 
     resolved_api_url = api_url or settings.api_base_url
     data_dir = Path(settings.data_dir)
@@ -98,7 +111,7 @@ def run(
     started_at = datetime.now(UTC)
     with ApiClient(resolved_api_url) as client:
         for case in cases:
-            score, line = _run_one_case(case, client, data_dir)
+            score, line = _run_one_case(case, client, data_dir, space=space)
             typer.echo(line)
             if score is not None:
                 logger.info("case scored", extra={"case_id": case.case_id, "suite": case.suite})
@@ -123,6 +136,10 @@ def run(
             f"[{suite_name}] suite averages: "
             + " ".join(f"{name}={value:.3f}" for name, value in summary.items())
         )
+        if space:
+            # Recorded alongside the metric means: a per-space run must stay
+            # attributable to its space when compared later (never cross-space).
+            summary = {**summary, "space": space}
         if not settings.database_url:
             continue
         run_id = save_run(
