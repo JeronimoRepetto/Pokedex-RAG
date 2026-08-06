@@ -131,6 +131,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         gateway=_LazyGateway(lambda: provider_registry.build(settings.llm_primary)),
         document_loader=SqlDocumentLoader(app.state.session_factory),
         provider_registry=provider_registry,
+        fallback_provider=settings.llm_fallback or None,
     )
     from api.rag.tracing import Tracing
 

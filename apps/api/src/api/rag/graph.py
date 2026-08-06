@@ -54,6 +54,7 @@ class RagDeps:
     context_budget_chars: int = 12_000
     max_output_tokens: int = 2048  # thinking models spend reasoning tokens from this
     provider_registry: ProviderRegistry | None = None  # resolves provider_override
+    fallback_provider: str | None = None  # tried once if the default gateway errors
 
 
 def build_graph(deps: RagDeps):
@@ -103,6 +104,13 @@ def build_graph(deps: RagDeps):
             )
         return deps.provider_registry.build(override)
 
+    def resolve_fallback() -> LLMGateway:
+        if deps.provider_registry is None:
+            raise UnknownProviderError(
+                f"fallback provider {deps.fallback_provider!r} configured but no registry is set"
+            )
+        return deps.provider_registry.build(deps.fallback_provider)
+
     def generate(state: RAGState) -> dict:
         context: BuiltContext | None = state.get("context")
         if context is None or not context.citation_map:
@@ -111,6 +119,7 @@ def build_graph(deps: RagDeps):
                 "warnings": ["retrieval returned no usable documents"],
                 "draft_answer": "",
             }
+        override = state.get("provider_override")
         gateway = resolve_gateway(state)
         request = GenerationRequest(
             messages=[
@@ -125,17 +134,40 @@ def build_graph(deps: RagDeps):
             temperature=0.2,
             max_output_tokens=deps.max_output_tokens,
         )
+        warnings: list[str] = []
         try:
             result = gateway.generate(request)
-        except (TransientProviderError, PermanentProviderError) as exc:
-            logger.error("generation failed", extra={"error": str(exc)})
-            return {
-                "status": "provider_error",
-                "warnings": [f"generation failed: {exc}"],
-                "draft_answer": "",
-                "provider": gateway.provider_name,
-                "model": gateway.model_name,
-            }
+        except (TransientProviderError, PermanentProviderError) as primary_exc:
+            logger.error(
+                "generation failed",
+                extra={"provider": gateway.provider_name, "error": str(primary_exc)},
+            )
+            # A manual provider override is an explicit request for that provider;
+            # only the default path falls back automatically, and only once.
+            if override or not deps.fallback_provider:
+                return {
+                    "status": "provider_error",
+                    "warnings": [f"generation failed: {primary_exc}"],
+                    "draft_answer": "",
+                    "provider": gateway.provider_name,
+                    "model": gateway.model_name,
+                }
+            warnings.append(f"{gateway.provider_name} failed, falling back: {primary_exc}")
+            gateway = resolve_fallback()
+            try:
+                result = gateway.generate(request)
+            except (TransientProviderError, PermanentProviderError) as fallback_exc:
+                logger.error(
+                    "fallback generation failed",
+                    extra={"provider": gateway.provider_name, "error": str(fallback_exc)},
+                )
+                return {
+                    "status": "provider_error",
+                    "warnings": [*warnings, f"fallback also failed: {fallback_exc}"],
+                    "draft_answer": "",
+                    "provider": gateway.provider_name,
+                    "model": gateway.model_name,
+                }
         return {
             "draft_answer": result.text,
             "provider": result.provider,
@@ -143,6 +175,7 @@ def build_graph(deps: RagDeps):
             "prompt_tokens": result.usage.prompt_tokens,
             "output_tokens": result.usage.output_tokens,
             "generation_metadata": result.metadata,
+            "warnings": warnings,
         }
 
     def finalize(state: RAGState) -> dict:
