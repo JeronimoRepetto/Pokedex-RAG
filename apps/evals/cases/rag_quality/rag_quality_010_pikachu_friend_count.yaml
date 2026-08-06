@@ -1,0 +1,7 @@
+case_id: rag_quality_010
+suite: rag_quality
+input:
+  question: "how many friends does pikachu have?"
+expected:
+  status: insufficient_evidence
+origin: handwritten

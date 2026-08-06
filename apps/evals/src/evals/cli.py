@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -6,6 +7,8 @@ import typer
 
 from evals.cases import load_cases
 from evals.client import ApiClient
+from evals.regression import AnswerNotFoundError, fetch_answer_question, write_regression_case
+from evals.scoring import score_case, score_rag_quality, summarize, summarize_rag_quality
 from evals.settings import EvalsSettings
 from pokedex_common.logging import configure_logging
 from pokedex_common.request_id import new_request_id, set_request_id
@@ -34,8 +37,40 @@ def list_cases(
     directory = cases_dir or Path(settings.cases_dir)
     cases = load_cases(directory, suite=suite)
     for case in cases:
-        typer.echo(f"{case.case_id} [{case.suite}] {case.input.get('query', case.input)}")
+        summary = case.input.get("query") or case.input.get("question") or case.input
+        typer.echo(f"{case.case_id} [{case.suite}] {summary}")
     typer.echo(f"total: {len(cases)}")
+
+
+def _run_one_case(case, client: ApiClient, data_dir: Path):
+    """Returns (score, echo_line) or raises for an unsupported suite."""
+    if case.suite == "text_retrieval":
+        result = client.search_text(**case.input)
+        hit_ids = [r["pokemon_id"] for r in result["results"]]
+        score = score_case(case, hit_ids)
+        return score, (
+            f"{case.case_id}: hits={hit_ids} recall@k={score.recall_at_k:.2f} "
+            f"rr={score.reciprocal_rank:.2f} top1={score.top_1_hit:.0f} "
+            f"ndcg@k={score.ndcg_at_k:.2f}"
+        )
+    if case.suite == "visual_retrieval":
+        image_path = data_dir / case.input["image_path"]
+        result = client.search_image(image_path, limit=case.input.get("limit", 10))
+        hit_ids = [r["pokemon_id"] for r in result["results"]]
+        score = score_case(case, hit_ids)
+        return score, (
+            f"{case.case_id}: hits={hit_ids} recall@k={score.recall_at_k:.2f} "
+            f"rr={score.reciprocal_rank:.2f} top1={score.top_1_hit:.0f} "
+            f"ndcg@k={score.ndcg_at_k:.2f}"
+        )
+    if case.suite == "rag_quality":
+        response = client.chat(**case.input)
+        score = score_rag_quality(case, response)
+        return score, (
+            f"{case.case_id}: status={score.status} contains={score.must_contain_ok:.0f} "
+            f"avoids={score.must_not_contain_ok:.0f} pass={score.passed:.0f}"
+        )
+    return None, f"{case.case_id}: unsupported suite {case.suite!r}, skipped"
 
 
 @app.command()
@@ -48,11 +83,8 @@ def run(
         Path | None, typer.Option(help="Override the configured cases directory")
     ] = None,
 ) -> None:
-    """Run golden cases against the live API and print raw responses.
-
-    No scoring yet (metrics land in Phase 5.2) — this establishes the plumbing:
-    load cases, call the real API, surface what came back.
-    """
+    """Run golden cases against the live API, score them (per-suite metrics), and
+    persist one eval_run per suite if DATABASE_URL is configured."""
     settings = bootstrap()
     directory = cases_dir or Path(settings.cases_dir)
     cases = load_cases(directory, suite=suite)
@@ -60,13 +92,106 @@ def run(
         typer.echo(f"no cases found under {directory} (suite={suite!r})")
         raise typer.Exit(code=1)
 
-    with ApiClient(api_url or settings.api_base_url) as client:
+    resolved_api_url = api_url or settings.api_base_url
+    data_dir = Path(settings.data_dir)
+    scores_by_suite: dict[str, list] = {}
+    started_at = datetime.now(UTC)
+    with ApiClient(resolved_api_url) as client:
         for case in cases:
-            if case.suite == "text_retrieval":
-                result = client.search_text(**case.input)
-                hit_ids = [r["pokemon_id"] for r in result["results"]]
-                logger.info("case run", extra={"case_id": case.case_id, "hits": hit_ids})
-                typer.echo(f"{case.case_id}: hits={hit_ids} expected={case.expected}")
-            else:
-                typer.echo(f"{case.case_id}: unsupported suite {case.suite!r}, skipped")
+            score, line = _run_one_case(case, client, data_dir)
+            typer.echo(line)
+            if score is not None:
+                logger.info("case scored", extra={"case_id": case.case_id, "suite": case.suite})
+                scores_by_suite.setdefault(case.suite, []).append(score)
+    finished_at = datetime.now(UTC)
+
     typer.echo(f"ran {len(cases)} case(s)")
+    if not scores_by_suite:
+        return
+
+    if settings.database_url:
+        from evals.persistence import save_run
+        from pokedex_db.engine import create_db_engine, create_session_factory
+
+        engine = create_db_engine(settings.database_url)
+        session_factory = create_session_factory(engine)
+
+    for suite_name, suite_scores in scores_by_suite.items():
+        summarizer = summarize_rag_quality if suite_name == "rag_quality" else summarize
+        summary = summarizer(suite_scores)
+        typer.echo(
+            f"[{suite_name}] suite averages: "
+            + " ".join(f"{name}={value:.3f}" for name, value in summary.items())
+        )
+        if not settings.database_url:
+            continue
+        run_id = save_run(
+            session_factory,
+            suite=suite_name,
+            api_base_url=resolved_api_url,
+            started_at=started_at,
+            finished_at=finished_at,
+            scores=suite_scores,
+            summary=summary,
+        )
+        typer.echo(f"[{suite_name}] persisted as eval_runs.id={run_id}")
+
+    if not settings.database_url:
+        typer.echo("DATABASE_URL not configured — run not persisted")
+
+
+@app.command("add-regression")
+def add_regression(
+    answer_id: Annotated[int, typer.Option(help="rag_answers.id to promote into a golden case")],
+    status: Annotated[str, typer.Option(help="Expected status going forward")] = "answered",
+    must_contain: Annotated[
+        list[str] | None, typer.Option(help="Substring the answer must contain (repeatable)")
+    ] = None,
+    must_not_contain: Annotated[
+        list[str] | None,
+        typer.Option(help="Substring the answer must never contain (repeatable)"),
+    ] = None,
+    suite: Annotated[str, typer.Option(help="Suite to file the case under")] = "rag_quality",
+    cases_dir: Annotated[
+        Path | None, typer.Option(help="Override the configured cases directory")
+    ] = None,
+) -> None:
+    """Promote a real /chat interaction into a permanent golden case — the fix for a
+    real bug becomes a regression test, not just a patch.
+
+    The QUESTION comes from the captured rag_answers row; the expected behavior
+    (--status/--must-contain/--must-not-contain) is what YOU assert going forward —
+    the captured answer is presumably the bad one being fixed, not the target.
+    """
+    settings = bootstrap()
+    if not settings.database_url:
+        typer.echo("DATABASE_URL is required to fetch the rag_answers row")
+        raise typer.Exit(code=1)
+    if not must_contain and not must_not_contain and status == "answered":
+        typer.echo(
+            "Nothing to assert: pass --must-contain/--must-not-contain, or "
+            "--status insufficient_evidence, so the case actually checks something"
+        )
+        raise typer.Exit(code=1)
+
+    from pokedex_db.engine import create_db_engine, create_session_factory
+
+    engine = create_db_engine(settings.database_url)
+    session_factory = create_session_factory(engine)
+    try:
+        question = fetch_answer_question(session_factory, answer_id)
+    except AnswerNotFoundError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+
+    directory = cases_dir or Path(settings.cases_dir)
+    path = write_regression_case(
+        directory,
+        answer_id=answer_id,
+        question=question,
+        suite=suite,
+        status=status,
+        must_contain=must_contain,
+        must_not_contain=must_not_contain,
+    )
+    typer.echo(f"wrote {path}")

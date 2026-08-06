@@ -1,0 +1,8 @@
+case_id: visual_retrieval_003
+suite: visual_retrieval
+input:
+  image_path: "sprites/7-official-artwork.png"
+  limit: 5
+expected:
+  relevant_pokemon_ids: [7]
+origin: handwritten

@@ -8,6 +8,7 @@ dependencies = [
     "httpx (>=0.28.1,<0.29.0)",
     "pyyaml (>=6.0,<7.0)",
     "pokedex-common",
+    "pokedex-db",
 ]
 
 [project.scripts]
@@ -18,6 +19,7 @@ packages = [{ include = "evals", from = "src" }]
 
 [tool.poetry.dependencies]
 pokedex-common = { path = "../../libs/common", develop = true }
+pokedex-db = { path = "../../libs/db", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0,<9.0"

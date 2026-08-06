@@ -30,8 +30,8 @@ def write_case(directory: Path, filename: str, **fields) -> None:
 def test_loads_every_committed_golden_case_without_error() -> None:
     cases = load_cases(REPO_CASES_DIR)
 
-    assert len(cases) >= 30
-    assert all(c.suite == "text_retrieval" for c in cases)
+    assert len(cases) >= 60  # 30 text_retrieval + 15 visual_retrieval + 15 rag_quality
+    assert {c.suite for c in cases} == {"text_retrieval", "visual_retrieval", "rag_quality"}
     assert len({c.case_id for c in cases}) == len(cases)
 
 

@@ -1,0 +1,8 @@
+case_id: rag_quality_003
+suite: rag_quality
+input:
+  question: "what type is gyarados?"
+expected:
+  status: answered
+  must_contain: ["water"]
+origin: handwritten

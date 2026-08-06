@@ -2,6 +2,8 @@ import respx
 from typer.testing import CliRunner
 
 from evals.cli import app
+from pokedex_db.engine import create_db_engine, create_session_factory
+from pokedex_db.models import Base, RagAnswer
 
 runner = CliRunner()
 BASE = "http://api.test"
@@ -62,3 +64,77 @@ def test_run_calls_the_api_and_reports_hits(tmp_path) -> None:
     assert "text_retrieval_001" in result.output
     assert "hits=[1]" in result.output
     assert "ran 1 case(s)" in result.output
+
+
+def make_sqlite_url_with_answer(tmp_path, question: str) -> str:
+    url = f"sqlite+pysqlite:///{tmp_path}/regress.db"
+    engine = create_db_engine(url)
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        session.add(RagAnswer(request_id="r1", question=question, status="answered", answer="x"))
+        session.commit()
+    return url
+
+
+def test_add_regression_requires_an_assertion(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", make_sqlite_url_with_answer(tmp_path, "q"))
+
+    result = runner.invoke(
+        app, ["add-regression", "--answer-id", "1", "--cases-dir", str(tmp_path)]
+    )
+
+    assert result.exit_code == 1
+    assert "Nothing to assert" in result.output
+
+
+def test_add_regression_writes_a_loadable_case(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(
+        "DATABASE_URL", make_sqlite_url_with_answer(tmp_path, "what type is bulbasaur?")
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "add-regression",
+            "--answer-id",
+            "1",
+            "--must-contain",
+            "grass",
+            "--must-contain",
+            "poison",
+            "--cases-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "wrote" in result.output
+
+    from evals.cases import load_cases
+
+    cases = load_cases(tmp_path)
+    assert len(cases) == 1
+    assert cases[0].input == {"question": "what type is bulbasaur?"}
+    assert cases[0].expected["must_contain"] == ["grass", "poison"]
+    assert cases[0].origin == "regression:1"
+
+
+def test_add_regression_fails_fast_on_an_unknown_answer_id(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", make_sqlite_url_with_answer(tmp_path, "q"))
+
+    result = runner.invoke(
+        app,
+        [
+            "add-regression",
+            "--answer-id",
+            "999",
+            "--must-contain",
+            "x",
+            "--cases-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "999" in result.output

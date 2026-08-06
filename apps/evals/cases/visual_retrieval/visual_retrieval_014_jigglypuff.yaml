@@ -1,0 +1,8 @@
+case_id: visual_retrieval_014
+suite: visual_retrieval
+input:
+  image_path: "sprites/39-shiny.png"
+  limit: 5
+expected:
+  relevant_pokemon_ids: [39]
+origin: handwritten

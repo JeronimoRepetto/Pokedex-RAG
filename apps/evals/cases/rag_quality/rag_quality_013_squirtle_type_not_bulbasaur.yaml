@@ -1,0 +1,9 @@
+case_id: rag_quality_013
+suite: rag_quality
+input:
+  question: "what type is squirtle?"
+expected:
+  status: answered
+  must_contain: ["water"]
+  must_not_contain: ["grass", "poison"]
+origin: handwritten

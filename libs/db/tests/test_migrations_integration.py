@@ -70,6 +70,9 @@ def test_upgrade_head_creates_schema_and_downgrade_removes_it(migrated_url: str)
         "embedding_spaces",
         "documents",
         "embeddings",
+        "rag_answers",
+        "eval_runs",
+        "eval_results",
     } <= tables
 
     with engine.connect() as conn:

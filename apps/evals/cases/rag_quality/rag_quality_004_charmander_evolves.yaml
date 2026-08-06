@@ -1,0 +1,8 @@
+case_id: rag_quality_004
+suite: rag_quality
+input:
+  question: "what does charmander evolve into?"
+expected:
+  status: answered
+  must_contain: ["charmeleon"]
+origin: handwritten

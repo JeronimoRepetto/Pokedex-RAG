@@ -8,6 +8,7 @@ def doc(document_id: int, content: str = "some content") -> ContextDocument:
         document_id=document_id,
         title=f"Doc {document_id}",
         content=content,
+        pokemon_id=1,
         pokemon_name="bulbasaur",
         doc_type="card",
     )

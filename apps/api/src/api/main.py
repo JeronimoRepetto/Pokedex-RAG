@@ -3,8 +3,10 @@ from fastapi import FastAPI
 from api.health import router as health_router
 from api.middleware import RequestIdMiddleware
 from api.rag.graph import RagDeps, build_graph
+from api.rag.judge import LLMJudge
 from api.rag.loader import SqlDocumentLoader
 from api.rag.service import ChatService
+from api.rag.validation import SqlPokemonTypeLookup
 from api.repositories import SqlPokemonRepository
 from api.routers.chat import router as chat_router
 from api.routers.pokemon import router as pokemon_router
@@ -134,6 +136,20 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             )
     app.state.provider_registry = provider_registry
 
+    judge = None
+    if settings.judge_provider:
+        if settings.judge_provider not in provider_registry.known_providers():
+            raise ValueError(
+                f"judge_provider={settings.judge_provider!r} is not a registered provider; "
+                f"known: {provider_registry.known_providers()}"
+            )
+        if settings.judge_provider == settings.llm_primary:
+            raise ValueError(
+                f"judge_provider={settings.judge_provider!r} must differ from "
+                f"llm_primary={settings.llm_primary!r} — a model must not grade its own answers"
+            )
+        judge = LLMJudge(_LazyGateway(lambda: provider_registry.build(settings.judge_provider)))
+
     rag_deps = RagDeps(
         repository=search_repository,
         embedder=_LazyEmbedder(embedder_factory),
@@ -141,6 +157,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         document_loader=SqlDocumentLoader(app.state.session_factory),
         provider_registry=provider_registry,
         fallback_provider=settings.llm_fallback or None,
+        type_lookup=SqlPokemonTypeLookup(app.state.session_factory),
+        judge=judge,
+        max_attempts=settings.max_reformulate_attempts,
     )
     from api.rag.tracing import Tracing
 
