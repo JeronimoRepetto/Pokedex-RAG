@@ -49,3 +49,11 @@ class ApiSettings(BaseAppSettings):
     # provider than llm_primary — enforced at startup, not left to good intentions.
     judge_provider: str = ""
     max_reformulate_attempts: int = 2
+
+    # Access gate (Phase 6.6): comma-separated shared keys. EMPTY DISABLES THE GATE —
+    # correct for local dev, unacceptable in a deployment, so the deploy runbook makes
+    # setting it a required step. Never logged; /health stays public for health checks.
+    api_keys: str = ""
+
+    def parsed_api_keys(self) -> frozenset[str]:
+        return frozenset(key.strip() for key in self.api_keys.split(",") if key.strip())

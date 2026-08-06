@@ -90,3 +90,65 @@ def summarize_rag_quality(scores: list[RagQualityScore]) -> dict[str, float]:
         "must_not_contain_rate": statistics.mean(s.must_not_contain_ok for s in scores),
         "pass_rate": statistics.mean(s.passed for s in scores),
     }
+
+
+@dataclass(frozen=True)
+class ComparisonScore:
+    """One golden case scored for ONE provider inside a `/compare` response."""
+
+    case_id: str
+    provider: str
+    model: str
+    citation_document_ids: list[str]
+    status_match: float
+    must_contain_ok: float
+    must_not_contain_ok: float
+    passed: float
+    judge_grounded: float | None
+    latency_ms: int
+    prompt_tokens: int
+    output_tokens: int
+
+
+def score_comparison(case: GoldenCase, candidate: dict) -> ComparisonScore:
+    """A candidate carries the same status/answer/citations shape as a /chat response,
+    so the golden expectations are scored by exactly the same rules — plus the judge
+    verdict and per-candidate cost/latency that only /compare reports."""
+    base = score_rag_quality(case, candidate)
+    verdict = candidate.get("judge")
+    return ComparisonScore(
+        case_id=case.case_id,
+        provider=candidate.get("provider", ""),
+        model=candidate.get("model", ""),
+        citation_document_ids=base.citation_document_ids,
+        status_match=base.status_match,
+        must_contain_ok=base.must_contain_ok,
+        must_not_contain_ok=base.must_not_contain_ok,
+        passed=base.passed,
+        judge_grounded=None if verdict is None else float(bool(verdict.get("grounded"))),
+        latency_ms=candidate.get("latency_ms", 0),
+        prompt_tokens=candidate.get("prompt_tokens", 0),
+        output_tokens=candidate.get("output_tokens", 0),
+    )
+
+
+def summarize_comparison(scores: list[ComparisonScore]) -> dict[str, float]:
+    """Judged and unjudged cases coexist (a judge can fail open), so the groundedness
+    rate is averaged over the judged subset only and reported alongside its own count
+    — averaging `None` as 0 would silently punish a provider for a broken judge."""
+    if not scores:
+        raise ValueError("no scores to summarize")
+    judged = [s.judge_grounded for s in scores if s.judge_grounded is not None]
+    summary = {
+        "status_match_rate": statistics.mean(s.status_match for s in scores),
+        "must_contain_rate": statistics.mean(s.must_contain_ok for s in scores),
+        "must_not_contain_rate": statistics.mean(s.must_not_contain_ok for s in scores),
+        "pass_rate": statistics.mean(s.passed for s in scores),
+        "judged_cases": float(len(judged)),
+        "mean_latency_ms": statistics.mean(s.latency_ms for s in scores),
+        "total_output_tokens": float(sum(s.output_tokens for s in scores)),
+        "total_prompt_tokens": float(sum(s.prompt_tokens for s in scores)),
+    }
+    if judged:
+        summary["judge_grounded_rate"] = statistics.mean(judged)
+    return summary

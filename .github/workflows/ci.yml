@@ -11,14 +11,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component:
-          - libs/common
-          - libs/db
-          - libs/embeddings
-          - libs/llm-gateway
-          - apps/data-pipeline
-          - apps/api
-          - apps/evals
+        # `package` is what coverage measures; `min-coverage` is a ratchet set just
+        # below each component's current number — it exists to catch rot, not to chase
+        # a target. Raise a floor when a component durably improves; never lower one
+        # without saying why in the PR.
+        include:
+          - component: libs/common
+            package: pokedex_common
+            min-coverage: 95
+          - component: libs/db
+            package: pokedex_db
+            min-coverage: 95
+          - component: libs/embeddings
+            package: pokedex_embeddings
+            min-coverage: 90
+          - component: libs/llm-gateway
+            package: pokedex_llm
+            min-coverage: 90
+          - component: apps/data-pipeline
+            package: pipeline
+            min-coverage: 85
+          - component: apps/api
+            package: api
+            min-coverage: 85
+          - component: apps/evals
+            package: evals
+            min-coverage: 85
     defaults:
       run:
         working-directory: ${{ matrix.component }}
@@ -35,6 +53,8 @@ jobs:
           cache-dependency-path: ${{ matrix.component }}/poetry.lock
 
       - name: Install dependencies
+        # Default groups only: the optional `local` group pulls torch (~300 MB) and is
+        # never needed by the offline suite.
         run: poetry install --no-interaction
 
       - name: Lint
@@ -42,8 +62,60 @@ jobs:
           poetry run ruff check .
           poetry run ruff format --check .
 
-      - name: Unit tests
-        run: poetry run pytest -q
+      - name: Unit tests with coverage
+        run: >
+          poetry run pytest -q
+          --cov=${{ matrix.package }}
+          --cov-report=term-missing
+          --cov-report=xml
+          --cov-fail-under=${{ matrix.min-coverage }}
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.package }}
+          path: ${{ matrix.component }}/coverage.xml
+          if-no-files-found: warn
+
+  pipeline-integrity:
+    # Runs the ENTIRE eval runner against a deterministic offline fake: no API, no
+    # database, no credentials, no spend. It catches the breakages a unit test suite
+    # structurally cannot — a malformed golden YAML, a renamed response field, a suite
+    # branch that crashes — before a paid live run ever discovers them.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pipx install poetry==2.4.1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: poetry
+          cache-dependency-path: apps/evals/poetry.lock
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Golden cases parse and are unique
+        run: poetry run evals list-cases
+
+      - name: Every suite runs end to end on fakes
+        run: |
+          set -euo pipefail
+          poetry run evals run --fake-api | tee run.log
+          grep -q "suite averages" run.log
+
+      - name: Comparison pipeline runs end to end on fakes
+        run: |
+          set -euo pipefail
+          poetry run evals compare --fake-api | tee compare.log
+          grep -q "provider(s)" compare.log
 
   integration:
     runs-on: ubuntu-latest

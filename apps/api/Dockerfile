@@ -10,8 +10,12 @@ ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
 RUN pip install poetry==2.4.1
 
 WORKDIR /app
+# Every path dependency declared in apps/api/pyproject.toml must be copied here or
+# `poetry install` fails resolving it — keep this list in sync with that file.
 COPY libs/common /app/libs/common
 COPY libs/db /app/libs/db
+COPY libs/embeddings /app/libs/embeddings
+COPY libs/llm-gateway /app/libs/llm-gateway
 COPY apps/api /app/apps/api
 
 WORKDIR /app/apps/api
@@ -30,4 +34,7 @@ USER app
 WORKDIR /app/apps/api
 EXPOSE 8000
 
-CMD ["uvicorn", "api.main:app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form on purpose: Cloud Run injects the port to listen on as $PORT and the
+# container must honor it. `exec` keeps uvicorn as PID 1 so SIGTERM still shuts it down
+# gracefully during a revision rollover.
+CMD exec uvicorn api.main:app --factory --host 0.0.0.0 --port ${PORT:-8000}

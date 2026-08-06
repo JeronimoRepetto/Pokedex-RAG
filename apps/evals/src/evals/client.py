@@ -43,6 +43,14 @@ class ApiClient:
         response.raise_for_status()
         return response.json()
 
+    def compare(self, question: str, providers: list[str] | None = None) -> dict:
+        body: dict = {"question": question}
+        if providers is not None:
+            body["providers"] = providers
+        response = self._client.post("/compare", json=body)
+        response.raise_for_status()
+        return response.json()
+
     def close(self) -> None:
         self._client.close()
 

@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 
 from api.health import router as health_router
-from api.middleware import RequestIdMiddleware
+from api.middleware import ApiKeyMiddleware, RequestIdMiddleware
+from api.rag.compare import CompareService
 from api.rag.graph import RagDeps, build_graph
 from api.rag.judge import LLMJudge
 from api.rag.loader import SqlDocumentLoader
@@ -9,6 +10,7 @@ from api.rag.service import ChatService
 from api.rag.validation import SqlPokemonTypeLookup
 from api.repositories import SqlPokemonRepository
 from api.routers.chat import router as chat_router
+from api.routers.compare import router as compare_router
 from api.routers.pokemon import router as pokemon_router
 from api.routers.search import router as search_router
 from api.search import SearchService, SqlSearchRepository
@@ -201,12 +203,21 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     app.state.chat_service = ChatService(
         build_graph(rag_deps), app.state.session_factory, tracing=tracing
     )
+    app.state.compare_service = CompareService(
+        rag_deps,
+        app.state.session_factory,
+        judge_provider=settings.judge_provider or None,
+    )
 
+    # Order matters: middleware added last runs first, so the request id exists before
+    # the API-key gate can reject anything (a 401 must still be traceable).
+    app.add_middleware(ApiKeyMiddleware, api_keys=settings.parsed_api_keys())
     app.add_middleware(RequestIdMiddleware)
     app.include_router(health_router)
     app.include_router(pokemon_router)
     app.include_router(search_router)
     app.include_router(chat_router)
+    app.include_router(compare_router)
     return app
 
 
