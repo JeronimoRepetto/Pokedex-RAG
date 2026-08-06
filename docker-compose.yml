@@ -44,6 +44,12 @@ services:
       LLM_FALLBACK: ${LLM_FALLBACK:-}
       AI_STUDIO_API_KEY: ${AI_STUDIO_API_KEY:-}
       AI_STUDIO_MODEL: ${AI_STUDIO_MODEL:-gemini-3.5-flash-lite}
+      JUDGE_PROVIDER: ${JUDGE_PROVIDER:-}
+      MAX_REFORMULATE_ATTEMPTS: ${MAX_REFORMULATE_ATTEMPTS:-2}
+      # Local embeddings stay OFF in the container: the image excludes the torch-heavy
+      # `local` group, so registering that space would only produce 503s.
+      # Access gate: empty by default locally, required in a deployment.
+      API_KEYS: ${API_KEYS:-}
     depends_on:
       db:
         condition: service_healthy
