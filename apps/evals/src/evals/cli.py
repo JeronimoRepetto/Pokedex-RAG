@@ -7,6 +7,7 @@ import typer
 
 from evals.cases import load_cases
 from evals.client import ApiClient
+from evals.regression import AnswerNotFoundError, fetch_answer_question, write_regression_case
 from evals.scoring import score_case, score_rag_quality, summarize, summarize_rag_quality
 from evals.settings import EvalsSettings
 from pokedex_common.logging import configure_logging
@@ -137,3 +138,60 @@ def run(
 
     if not settings.database_url:
         typer.echo("DATABASE_URL not configured — run not persisted")
+
+
+@app.command("add-regression")
+def add_regression(
+    answer_id: Annotated[int, typer.Option(help="rag_answers.id to promote into a golden case")],
+    status: Annotated[str, typer.Option(help="Expected status going forward")] = "answered",
+    must_contain: Annotated[
+        list[str] | None, typer.Option(help="Substring the answer must contain (repeatable)")
+    ] = None,
+    must_not_contain: Annotated[
+        list[str] | None,
+        typer.Option(help="Substring the answer must never contain (repeatable)"),
+    ] = None,
+    suite: Annotated[str, typer.Option(help="Suite to file the case under")] = "rag_quality",
+    cases_dir: Annotated[
+        Path | None, typer.Option(help="Override the configured cases directory")
+    ] = None,
+) -> None:
+    """Promote a real /chat interaction into a permanent golden case — the fix for a
+    real bug becomes a regression test, not just a patch.
+
+    The QUESTION comes from the captured rag_answers row; the expected behavior
+    (--status/--must-contain/--must-not-contain) is what YOU assert going forward —
+    the captured answer is presumably the bad one being fixed, not the target.
+    """
+    settings = bootstrap()
+    if not settings.database_url:
+        typer.echo("DATABASE_URL is required to fetch the rag_answers row")
+        raise typer.Exit(code=1)
+    if not must_contain and not must_not_contain and status == "answered":
+        typer.echo(
+            "Nothing to assert: pass --must-contain/--must-not-contain, or "
+            "--status insufficient_evidence, so the case actually checks something"
+        )
+        raise typer.Exit(code=1)
+
+    from pokedex_db.engine import create_db_engine, create_session_factory
+
+    engine = create_db_engine(settings.database_url)
+    session_factory = create_session_factory(engine)
+    try:
+        question = fetch_answer_question(session_factory, answer_id)
+    except AnswerNotFoundError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+
+    directory = cases_dir or Path(settings.cases_dir)
+    path = write_regression_case(
+        directory,
+        answer_id=answer_id,
+        question=question,
+        suite=suite,
+        status=status,
+        must_contain=must_contain,
+        must_not_contain=must_not_contain,
+    )
+    typer.echo(f"wrote {path}")

@@ -1,0 +1,9 @@
+case_id: regression_000001
+suite: rag_quality
+input:
+  question: What advantages does Bulbasaur have against Squirtle?
+expected:
+  status: answered
+  must_contain:
+  - grass
+origin: regression:1
