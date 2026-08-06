@@ -12,6 +12,7 @@ CARD = ContextDocument(
     document_id=1,
     title="Squirtle (#7) — Pokédex card",
     content="Squirtle is a water type Pokémon. Base stats: HP 44.",
+    pokemon_id=7,
     pokemon_name="squirtle",
     doc_type="card",
     source_refs={"pokeapi": ["https://pokeapi.co/api/v2/pokemon/7/"]},
@@ -20,6 +21,7 @@ FLAVOR = ContextDocument(
     document_id=2,
     title="Squirtle — Pokédex entries",
     content="After birth, its back swells into a shell.",
+    pokemon_id=7,
     pokemon_name="squirtle",
     doc_type="flavor",
 )
@@ -60,12 +62,22 @@ class FakeLoader:
         return {d.document_id: d for d in (CARD, FLAVOR) if d.document_id in document_ids}
 
 
+class FakeTypeLookup:
+    def __init__(self, types_by_pokemon: dict, known_types: list[str]) -> None:
+        self._types_by_pokemon = types_by_pokemon
+        self.known_types = known_types
+
+    def types_for(self, pokemon_id: int):
+        return self._types_by_pokemon.get(pokemon_id)
+
+
 def run_graph(
     llm: FakeLLM,
     repo: FakeRepo | None = None,
     provider_registry: ProviderRegistry | None = None,
     provider_override: str | None = None,
     fallback_provider: str | None = None,
+    type_lookup=None,
 ) -> dict:
     repo = repo or FakeRepo()
     deps = RagDeps(
@@ -75,6 +87,7 @@ def run_graph(
         document_loader=FakeLoader(),
         provider_registry=provider_registry,
         fallback_provider=fallback_provider,
+        type_lookup=type_lookup,
     )
     return build_graph(deps).invoke(
         {"question": "  what type is   squirtle? ", "provider_override": provider_override}
@@ -227,3 +240,35 @@ def test_provider_override_does_not_trigger_the_automatic_fallback() -> None:
     assert state["status"] == "provider_error"
     assert state["provider"] == "override"
     assert fallback.requests == []
+
+
+def test_validate_corrects_a_wrong_type_claim() -> None:
+    llm = FakeLLM(script=["Squirtle is a fire type Pokémon [1]."])
+    type_lookup = FakeTypeLookup({7: ["water"]}, ["fire", "water"])
+
+    state = run_graph(llm, type_lookup=type_lookup)
+
+    assert state["status"] == "corrected"
+    assert state["corrections_applied"] == 1
+    assert "Correction: squirtle is water type, not fire." in state["answer"]
+    assert state["answer"].startswith("Squirtle is a fire type Pokémon [1].")
+
+
+def test_validate_leaves_a_correct_claim_untouched() -> None:
+    llm = FakeLLM(script=["Squirtle is a water type Pokémon [1]."])
+    type_lookup = FakeTypeLookup({7: ["water"]}, ["fire", "water"])
+
+    state = run_graph(llm, type_lookup=type_lookup)
+
+    assert state["status"] == "answered"
+    assert state.get("corrections_applied") is None
+    assert state["answer"] == "Squirtle is a water type Pokémon [1]."
+
+
+def test_validate_is_a_noop_without_a_type_lookup_configured() -> None:
+    llm = FakeLLM(script=["Squirtle is a fire type Pokémon [1]."])
+
+    state = run_graph(llm)  # no type_lookup passed — matches every other test above
+
+    assert state["status"] == "answered"
+    assert state["answer"] == "Squirtle is a fire type Pokémon [1]."

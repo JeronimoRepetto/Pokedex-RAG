@@ -1,11 +1,12 @@
-"""The RAG pipeline as a LangGraph graph (deliberately linear in Phase 3).
+"""The RAG pipeline as a LangGraph graph.
 
     analyze_query → (retrieve_vector ∥ retrieve_lexical) → fuse_rrf
-                  → build_context → generate → finalize
+                  → build_context → generate → finalize → validate
 
 Dependencies (repository, embedder, gateway, document loader) are injected via
 `RagDeps` when the graph is built, so the whole graph runs on fakes in unit tests.
-Phase 4 adds the provider-fallback branch; Phase 5 adds validation/judge/reformulate.
+Phase 4 added the provider-fallback branch; Phase 5.4 adds deterministic validation
+(still linear here — conditional judge/reformulate/abstain edges land in 5.5).
 """
 
 import logging
@@ -23,6 +24,7 @@ from api.rag.prompts import (
     USER_TEMPLATE,
 )
 from api.rag.state import RAGState
+from api.rag.validation import PokemonTypeLookupProtocol, check_type_claims
 from api.search import SearchHit, SearchRepositoryProtocol
 from pokedex_embeddings import EmbedderProtocol
 from pokedex_llm import (
@@ -55,6 +57,7 @@ class RagDeps:
     max_output_tokens: int = 2048  # thinking models spend reasoning tokens from this
     provider_registry: ProviderRegistry | None = None  # resolves provider_override
     fallback_provider: str | None = None  # tried once if the default gateway errors
+    type_lookup: PokemonTypeLookupProtocol | None = None  # Phase 5.4 factual cross-check
 
 
 def build_graph(deps: RagDeps):
@@ -215,6 +218,20 @@ def build_graph(deps: RagDeps):
         ]
         return {"status": "answered", "answer": draft, "citations": citations, "warnings": warnings}
 
+    def validate(state: RAGState) -> dict:
+        if state.get("status") != "answered" or deps.type_lookup is None:
+            return {}
+        context: BuiltContext = state["context"]
+        corrections = check_type_claims(state["answer"], context.citation_map, deps.type_lookup)
+        if not corrections:
+            return {}
+        notes = " ".join(c.note() for c in corrections)
+        return {
+            "status": "corrected",
+            "answer": f"{state['answer']}\n\n{notes}",
+            "corrections_applied": len(corrections),
+        }
+
     graph = StateGraph(RAGState)
     graph.add_node("analyze_query", analyze_query)
     graph.add_node("retrieve_vector", retrieve_vector)
@@ -223,6 +240,7 @@ def build_graph(deps: RagDeps):
     graph.add_node("build_context", build_context_node)
     graph.add_node("generate", generate)
     graph.add_node("finalize", finalize)
+    graph.add_node("validate", validate)
 
     graph.add_edge(START, "analyze_query")
     graph.add_edge("analyze_query", "retrieve_vector")
@@ -231,5 +249,6 @@ def build_graph(deps: RagDeps):
     graph.add_edge("fuse_rrf", "build_context")
     graph.add_edge("build_context", "generate")
     graph.add_edge("generate", "finalize")
-    graph.add_edge("finalize", END)
+    graph.add_edge("finalize", "validate")
+    graph.add_edge("validate", END)
     return graph.compile()

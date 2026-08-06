@@ -5,6 +5,7 @@ from api.middleware import RequestIdMiddleware
 from api.rag.graph import RagDeps, build_graph
 from api.rag.loader import SqlDocumentLoader
 from api.rag.service import ChatService
+from api.rag.validation import SqlPokemonTypeLookup
 from api.repositories import SqlPokemonRepository
 from api.routers.chat import router as chat_router
 from api.routers.pokemon import router as pokemon_router
@@ -141,6 +142,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         document_loader=SqlDocumentLoader(app.state.session_factory),
         provider_registry=provider_registry,
         fallback_provider=settings.llm_fallback or None,
+        type_lookup=SqlPokemonTypeLookup(app.state.session_factory),
     )
     from api.rag.tracing import Tracing
 

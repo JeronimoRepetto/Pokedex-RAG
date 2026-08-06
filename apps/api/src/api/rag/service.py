@@ -47,7 +47,7 @@ class ChatService:
             citations=citations,
             confidence=None,  # the Phase-5 judge owns confidence
             warnings=state.get("warnings", []),
-            corrections_applied=0,
+            corrections_applied=state.get("corrections_applied", 0),
             evaluation_id=None,
             request_id=request_id,
         )

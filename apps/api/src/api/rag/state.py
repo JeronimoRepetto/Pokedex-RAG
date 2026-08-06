@@ -32,3 +32,4 @@ class RAGState(TypedDict, total=False):
     warnings: list[str]
     citations: list[dict[str, Any]]
     answer: str | None
+    corrections_applied: int  # set by the validate node (Phase 5.4)

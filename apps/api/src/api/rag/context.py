@@ -13,6 +13,7 @@ class ContextDocument:
     document_id: int
     title: str
     content: str
+    pokemon_id: int
     pokemon_name: str
     doc_type: str
     source_refs: dict = field(default_factory=dict)

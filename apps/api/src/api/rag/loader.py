@@ -22,6 +22,7 @@ class SqlDocumentLoader:
                     Document.content,
                     Document.doc_type,
                     Document.source_refs,
+                    Document.pokemon_id,
                     Pokemon.name,
                 )
                 .join(Pokemon, Pokemon.id == Document.pokemon_id)
@@ -34,6 +35,7 @@ class SqlDocumentLoader:
                 content=row.content,
                 doc_type=row.doc_type,
                 source_refs=row.source_refs or {},
+                pokemon_id=row.pokemon_id,
                 pokemon_name=row.name,
             )
             for row in rows
