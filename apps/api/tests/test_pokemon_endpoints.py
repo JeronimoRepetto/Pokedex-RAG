@@ -34,7 +34,8 @@ BULBASAUR_CARD = PokemonCard(
 
 
 class InMemoryPokemonRepository:
-    def __init__(self) -> None:
+    def __init__(self, sprite_paths: dict[str, str] | None = None) -> None:
+        self.sprite_paths = sprite_paths or {}
         self.cards = {1: BULBASAUR_CARD}
         self.summaries = [
             PokemonSummary(id=1, name="bulbasaur", types=BULBASAUR_CARD.types),
@@ -68,6 +69,13 @@ class InMemoryPokemonRepository:
 
     def get_evolution_chain(self, id_or_name):
         return self.chain if self.get_card(id_or_name) else None
+
+    def get_sprite(self, id_or_name, kind):
+        from api.repositories import SpriteRef
+
+        if self.get_card(id_or_name) is None or kind not in self.sprite_paths:
+            return None
+        return SpriteRef(pokemon_id=1, kind=kind, relative_path=self.sprite_paths[kind])
 
 
 @pytest.fixture

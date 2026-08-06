@@ -78,6 +78,44 @@ jobs:
           path: ${{ matrix.component }}/coverage.xml
           if-no-files-found: warn
 
+  web:
+    # apps/web is a Node component, so it gets its own job rather than a slot in the
+    # Poetry matrix. The build is part of the gate: a static export can fail on things
+    # the unit tests never touch (a missing generateStaticParams, a server-only import).
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint and format
+        run: |
+          pnpm lint
+          pnpm format:check
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Static export builds
+        run: pnpm build
+
   pipeline-integrity:
     # Runs the ENTIRE eval runner against a deterministic offline fake: no API, no
     # database, no credentials, no spend. It catches the breakages a unit test suite
