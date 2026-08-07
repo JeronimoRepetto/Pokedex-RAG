@@ -1,0 +1,9 @@
+case_id: rag_quality_018
+suite: rag_quality
+input:
+  question: "Are Bulbasaur's grass attacks effective against Squirtle?"
+expected:
+  status: answered
+  must_contain:
+  - super effective
+origin: handwritten (Phase 8 - the 6.2 ungrounded-claim scenario, now citable)

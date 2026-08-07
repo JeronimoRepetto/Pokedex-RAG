@@ -1,0 +1,10 @@
+case_id: rag_quality_017
+suite: rag_quality
+input:
+  question: "What is Gengar weak to?"
+expected:
+  status: answered
+  must_contain:
+  - ground
+  - psychic
+origin: handwritten (Phase 8 - answerable only since the matchup documents exist)
