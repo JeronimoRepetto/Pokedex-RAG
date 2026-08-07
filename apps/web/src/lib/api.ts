@@ -105,7 +105,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       requestId,
     );
   }
-  return (await response.json()) as T;
+  try {
+    return (await response.json()) as T;
+  } catch {
+    // HTML where JSON was expected almost always means the request never reached the
+    // API: NEXT_PUBLIC_API_BASE_URL is unset or wrong, so it hit the page host instead
+    // and got its 404 shell. Say that, rather than leaking "Unexpected token '<'".
+    throw new ApiError(
+      `The API did not return JSON. NEXT_PUBLIC_API_BASE_URL is ` +
+        `${API_BASE_URL ? `set to ${API_BASE_URL}` : 'empty, so requests go to this page host'}` +
+        ` — check that it points at a running Pokédex API.`,
+      response.status,
+      requestId,
+    );
+  }
 }
 
 function jsonPost<T>(path: string, body: unknown): Promise<T> {

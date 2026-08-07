@@ -144,3 +144,25 @@ describe('error translation', () => {
     await expect(chat('what type is bulbasaur?')).resolves.toEqual(ANSWERED);
   });
 });
+
+describe('misconfiguration', () => {
+  it('explains an HTML response instead of leaking a JSON parse error', async () => {
+    // The real-world case: NEXT_PUBLIC_API_BASE_URL is wrong/unset, the request hits
+    // the page host, and its 404 shell comes back as HTML with a 200.
+    fakeFetch([
+      {
+        match: () => true,
+        get body(): never {
+          throw new SyntaxError(`Unexpected token '<', "<!DOCTYPE "... is not valid JSON`);
+        },
+      },
+    ]);
+
+    const error = await chat('a question').catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.message).toMatch(/did not return JSON/);
+    expect(error.message).toMatch(/NEXT_PUBLIC_API_BASE_URL/);
+    expect(error.message).not.toMatch(/Unexpected token/);
+  });
+});

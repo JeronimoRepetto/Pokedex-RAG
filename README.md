@@ -8,6 +8,27 @@ Retrieval-Augmented Generation over Gen-1 Pokémon data.
 - **Observability**: Langfuse
 - **Evaluation**: golden dataset + LLM-as-judge, run as a test suite
 
+## The device
+
+Everything happens inside a Pokédex drawn entirely in CSS — no franchise artwork is
+used or redistributed. Type a name, a question or a comparison in any of the supported
+languages and an intent classifier routes it; drop in an image and it matches against
+sprite vectors.
+
+<p align="center">
+  <img src="assets/screenshot/image1.png" alt="The Pokédex device at rest, awaiting a query" width="49%">
+  <img src="assets/screenshot/image0.png" alt="A Pokémon card on the device screen, showing types, flavour text and base stats" width="49%">
+</p>
+
+<p align="center">
+  <img src="assets/screenshot/image2.png" alt="A head-to-head comparison: one shared stat grid with the stronger value highlighted" width="60%">
+</p>
+
+The comparison view is computed from the type chart, not generated — the model is never
+asked to invent a matchup. Note what it refuses to say: *"no type advantage either way"*
+and *"not a battle simulation"*, because base stats plus a type chart do not decide a
+battle.
+
 ## Architecture
 
 ```mermaid
@@ -130,5 +151,10 @@ pipeline-integrity check, and integration tests against a real pgvector service.
 Educational, non-commercial project built to experiment with RAG, multimodal search and
 model evaluation. Not affiliated with, sponsored or endorsed by Nintendo, Game Freak,
 Creatures Inc. or The Pokémon Company. Pokémon names, characters and images belong to
-their respective owners. Data obtained via [PokéAPI](https://pokeapi.co/). No sprite or
-artwork files are distributed in this repository.
+their respective owners. Data obtained via [PokéAPI](https://pokeapi.co/).
+
+No sprite or artwork files are distributed as reusable assets: the sprites the app
+displays are downloaded at ingest time into a gitignored `data/` directory. The
+screenshots under `assets/screenshot/` are illustrations of the running application and
+incidentally show those sprites. The Pokédex device itself is an original CSS
+interpretation, not franchise artwork.
