@@ -445,18 +445,64 @@
   font-size: 0.95rem;
 }
 
-.versus-grid {
+/* One shared grid for the whole head-to-head: fighters in the first row, then one
+   row PER STAT spanning both columns — cells align by construction, no matter how
+   tall either fighter's header is (extra type badges used to misalign two cards). */
+.versus-table {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 0.6rem;
-  align-items: start;
+  grid-template-columns: 1fr minmax(5rem, auto) 1fr;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+}
+
+.versus-fighter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  align-self: end;
+  text-align: center;
+}
+
+.versus-fighter img {
+  object-fit: contain;
+}
+
+.versus-fighter-name {
+  text-transform: capitalize;
+}
+
+.versus-fighter-types {
+  justify-content: center;
 }
 
 .versus-vs {
-  align-self: center;
+  align-self: end;
+  justify-self: center;
+  padding-bottom: 0.4rem;
   font-weight: 800;
   color: var(--warn);
   font-size: 0.9rem;
+}
+
+.versus-stat {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.versus-stat.versus-win {
+  color: var(--ok);
+  box-shadow: inset 0 0 0 1px var(--ok);
+}
+
+.versus-statname {
+  text-align: center;
+  font-size: 0.72rem;
+  line-height: 1.15;
 }
 
 /* ---- responsive ------------------------------------------------------------------ */
@@ -503,14 +549,6 @@
   .hinge-tabs button[aria-selected='true'] {
     background: var(--screen-bg);
     color: #7ee787;
-  }
-
-  .versus-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .versus-vs {
-    justify-self: center;
   }
 }
 

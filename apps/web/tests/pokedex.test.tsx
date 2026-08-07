@@ -64,8 +64,11 @@ describe('intent dispatch', () => {
     await type(user, 'Pickachu es mas fuerte que Gengar?');
 
     expect(await screen.findByText('VS')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /pikachu/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /gengar/i })).toBeInTheDocument();
+    // Fighter names appear in the header AND in the matchup notes.
+    expect(screen.getAllByText(/pikachu/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/gengar/i).length).toBeGreaterThan(0);
+    // The shared-grid layout labels each stat once, between the two values.
+    expect(screen.getAllByText('hp')).toHaveLength(1);
     expect(screen.getByText(/not a battle simulation/)).toBeInTheDocument();
   });
 
