@@ -114,12 +114,24 @@ Each component's README covers how to run, test and deploy it.
 | `apps/web` | frontend | The Pokédex device: single-screen static UI with intent routing over the public API |
 | `libs/*` | libraries | Shared config/logging/contracts, DB models, embedders, LLM gateway |
 
-To run the UI, start the API with this origin allowed and point the app at it:
+### Starting it again (after a reboot, or after stopping)
 
 ```bash
-cd apps/api && CORS_ALLOWED_ORIGINS=http://localhost:3000 poetry run uvicorn api.main:app --factory --port 8000
-cd apps/web && cp .env.example .env.local && pnpm install && pnpm dev    # http://localhost:3000
+make demo        # database + API, waits until /health answers
+make web-dev     # the UI on http://localhost:3000
 ```
+
+```bash
+make status      # what is running + row counts, so "is there data?" is one command
+make demo-stop   # back to zero running cost
+```
+
+**Ingested data survives all of this.** The corpus lives in the `pgdata` Docker volume,
+not in the containers, so stopping the stack or rebooting loses nothing — a re-ingest is
+never needed. Only `docker compose down -v` would erase it, which is why no Make target
+passes `-v`. If the UI shows no data after a restart, the database is almost certainly
+fine: check that `NEXT_PUBLIC_API_BASE_URL` in `apps/web/.env.local` points at the API
+that is actually running (`make status` shows its port).
 
 ## Endpoints
 

@@ -1,3 +1,9 @@
+# Pinned so the stack has ONE identity no matter which directory it is started from.
+# Compose otherwise derives the project name from the folder, so running these commands
+# from a git worktree would silently create a second stack with its own empty database
+# — and the ingested corpus would appear to have vanished.
+name: pokedex-rag
+
 services:
   db:
     image: pgvector/pgvector:0.8.0-pg16
