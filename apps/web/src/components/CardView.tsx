@@ -8,15 +8,15 @@ import type { PokemonCard } from '@/lib/types';
  * it a loaded card, so it renders identically inside the carousel, the card screen and
  * the versus split.
  */
-export function CardView({ card, compact = false }: { card: PokemonCard; compact?: boolean }) {
+export function CardView({ card }: { card: PokemonCard }) {
   return (
     <article className="cardview">
       <header className="cardview-head">
         <img
           src={spriteUrl(card.id)}
           alt={`${card.name} artwork`}
-          width={compact ? 72 : 110}
-          height={compact ? 72 : 110}
+          width={110}
+          height={110}
           loading="lazy"
           onError={(event) => {
             event.currentTarget.style.visibility = 'hidden';
@@ -38,7 +38,7 @@ export function CardView({ card, compact = false }: { card: PokemonCard; compact
         </div>
       </header>
 
-      {!compact && card.flavor_text ? (
+      {card.flavor_text ? (
         <p className="cardview-flavor">{card.flavor_text.replace(/\s+/g, ' ')}</p>
       ) : null}
 
@@ -53,21 +53,19 @@ export function CardView({ card, compact = false }: { card: PokemonCard; compact
         ))}
       </dl>
 
-      {!compact ? (
-        <p className="muted cardview-meta">
-          Gen {card.generation}
-          {card.habitat ? ` · ${card.habitat}` : ''}
-          {card.height_decimetres != null
-            ? ` · ${(card.height_decimetres / 10).toFixed(1)} m`
-            : ''}
-          {card.weight_hectograms != null
-            ? ` · ${(card.weight_hectograms / 10).toFixed(1)} kg`
-            : ''}
-          {card.abilities.length > 0
-            ? ` · ${card.abilities.map((a) => a.name.replace(/-/g, ' ')).join(', ')}`
-            : ''}
-        </p>
-      ) : null}
+      <p className="muted cardview-meta">
+        Gen {card.generation}
+        {card.habitat ? ` · ${card.habitat}` : ''}
+        {card.height_decimetres != null
+          ? ` · ${(card.height_decimetres / 10).toFixed(1)} m`
+          : ''}
+        {card.weight_hectograms != null
+          ? ` · ${(card.weight_hectograms / 10).toFixed(1)} kg`
+          : ''}
+        {card.abilities.length > 0
+          ? ` · ${card.abilities.map((a) => a.name.replace(/-/g, ' ')).join(', ')}`
+          : ''}
+      </p>
     </article>
   );
 }
