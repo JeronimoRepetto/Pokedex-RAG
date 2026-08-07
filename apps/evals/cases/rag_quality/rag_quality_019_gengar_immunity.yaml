@@ -1,0 +1,10 @@
+case_id: rag_quality_019
+suite: rag_quality
+input:
+  question: "Which attack types have no effect on Gengar?"
+expected:
+  status: answered
+  must_contain:
+  - normal
+  - fighting
+origin: handwritten (Phase 8 - immunity comes only from the matchup documents)
