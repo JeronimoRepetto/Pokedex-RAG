@@ -58,9 +58,20 @@ function VersusInScreen({ matchup }: { matchup: MatchupResponse }) {
   );
 }
 
-export function Screen({ state, actions }: { state: PokedexState; actions: PokedexActions }) {
+export function Screen({
+  state,
+  actions,
+  contentRef: externalRef,
+}: {
+  state: PokedexState;
+  actions: PokedexActions;
+  /** Exposed so the d-pad's up/down buttons (which live outside the screen) can
+      scroll this content — the device's own controls must be able to browse it. */
+  contentRef?: React.RefObject<HTMLDivElement | null>;
+}) {
   const { screen, activity, cards } = state;
-  const contentRef = useRef<HTMLDivElement>(null);
+  const internalRef = useRef<HTMLDivElement>(null);
+  const contentRef = externalRef ?? internalRef;
   const headingRef = useRef<HTMLDivElement>(null);
   const key = screenKey(screen);
   const previousKey = useRef(key);
@@ -72,7 +83,7 @@ export function Screen({ state, actions }: { state: PokedexState; actions: Poked
     previousKey.current = key;
     if (contentRef.current) contentRef.current.scrollTop = 0;
     headingRef.current?.focus({ preventScroll: true });
-  }, [key]);
+  }, [key, contentRef]);
 
   const failed = activity.kind === 'failed';
 

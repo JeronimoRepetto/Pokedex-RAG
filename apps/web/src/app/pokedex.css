@@ -101,8 +101,9 @@
   background: radial-gradient(circle at 35% 30%, #b6f3bb, #2e9e46 70%);
 }
 
-/* The lens doubles as the activity light. Animation is defined ONLY inside the
-   no-preference block, so reduced-motion users simply see the static lens. */
+/* The lens doubles as the activity light. Animation and smooth scrolling are defined
+   ONLY inside the no-preference block, so reduced-motion users get a static lens and
+   instant scroll steps. */
 @media (prefers-reduced-motion: no-preference) {
   .lens[data-busy='true'] {
     animation: lens-pulse 1.1s ease-in-out infinite;
@@ -113,13 +114,34 @@
       filter: brightness(1.5) saturate(1.4);
     }
   }
+
+  .screen-content {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ---- the stage title ------------------------------------------------------------- */
+
+/* Styled with plain CSS to EVOKE the franchise lettering (yellow fill, blue outline)
+   without using its logo, wordmark or any font asset — same IP line as the chassis. */
+.stage-title {
+  text-align: center;
+  margin: 1.4rem 0 0;
+  font-size: clamp(2rem, 5.5vw, 3.2rem);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.05em;
+  color: #ffcb05;
+  -webkit-text-stroke: 2px #2a75bb;
+  paint-order: stroke fill;
+  text-shadow:
+    2px 2px 0 #1a4a86,
+    4px 4px 0 rgb(0 0 0 / 0.55);
 }
 
 /* ---- the screen ---------------------------------------------------------------- */
 
 .screen-bezel {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -134,8 +156,10 @@
 }
 
 .screen {
-  flex: 1;
-  min-height: clamp(16rem, 46vh, 30rem);
+  /* FIXED height, not min-height: the device must never stretch to fit tall content
+     (a versus result used to balloon the whole chassis). Content scrolls INSIDE the
+     screen instead — via wheel/touch, or the d-pad's up/down buttons. */
+  height: clamp(18rem, 48vh, 28rem);
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden; /* clips the content to the CRT radius */
@@ -238,6 +262,18 @@
   border-radius: 0 8px 8px 0;
 }
 
+/* Up/down are REAL buttons too: they scroll the screen's content, so tall results
+   (a versus, a long answer) are browsable from the device's own controls. */
+.dpad-up {
+  grid-area: 1 / 2;
+  border-radius: 8px 8px 0 0;
+}
+
+.dpad-down {
+  grid-area: 3 / 2;
+  border-radius: 0 0 8px 8px;
+}
+
 .dpad-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -245,20 +281,6 @@
 
 .dpad-button:not(:disabled):active {
   box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.7);
-}
-
-.dpad::before {
-  content: '';
-  grid-area: 1 / 2;
-  background: linear-gradient(180deg, #2e2e36, #17171d);
-  border-radius: 8px 8px 0 0;
-}
-
-.dpad::after {
-  content: '';
-  grid-area: 3 / 2;
-  background: linear-gradient(180deg, #2e2e36, #17171d);
-  border-radius: 0 0 8px 8px;
 }
 
 /* ---- hinge ---------------------------------------------------------------------- */
