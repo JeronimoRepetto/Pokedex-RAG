@@ -17,11 +17,8 @@ sprite vectors.
 
 <p align="center">
   <img src="assets/screenshot/image1.png" alt="The Pokédex device at rest, awaiting a query" width="49%">
-  <img src="assets/screenshot/image0.png" alt="A Pokémon card on the device screen, showing types, flavour text and base stats" width="49%">
-</p>
-
-<p align="center">
-  <img src="assets/screenshot/image2.png" alt="A head-to-head comparison: one shared stat grid with the stronger value highlighted" width="60%">
+  <img src="assets/screenshot/image2.png" alt="A head-to-head comparison: one shared stat grid with the stronger value highlighted" 
+width="49%">
 </p>
 
 The comparison view is computed from the type chart, not generated — the model is never
