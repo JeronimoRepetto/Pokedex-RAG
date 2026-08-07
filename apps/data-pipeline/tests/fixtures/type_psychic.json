@@ -1,0 +1,38 @@
+{
+  "id": 14,
+  "name": "psychic",
+  "damage_relations": {
+    "double_damage_from": [
+      { "name": "bug", "url": "https://pokeapi.co/api/v2/type/7/" },
+      { "name": "ghost", "url": "https://pokeapi.co/api/v2/type/8/" },
+      { "name": "dark", "url": "https://pokeapi.co/api/v2/type/17/" }
+    ],
+    "double_damage_to": [
+      { "name": "fighting", "url": "https://pokeapi.co/api/v2/type/2/" },
+      { "name": "poison", "url": "https://pokeapi.co/api/v2/type/4/" }
+    ],
+    "half_damage_from": [
+      { "name": "fighting", "url": "https://pokeapi.co/api/v2/type/2/" },
+      { "name": "psychic", "url": "https://pokeapi.co/api/v2/type/14/" }
+    ],
+    "half_damage_to": [
+      { "name": "psychic", "url": "https://pokeapi.co/api/v2/type/14/" },
+      { "name": "steel", "url": "https://pokeapi.co/api/v2/type/9/" }
+    ],
+    "no_damage_from": [],
+    "no_damage_to": [{ "name": "dark", "url": "https://pokeapi.co/api/v2/type/17/" }]
+  },
+  "past_damage_relations": [
+    {
+      "generation": { "name": "generation-i", "url": "https://pokeapi.co/api/v2/generation/1/" },
+      "damage_relations": {
+        "double_damage_from": [],
+        "double_damage_to": [],
+        "half_damage_from": [],
+        "half_damage_to": [],
+        "no_damage_from": [{ "name": "ghost", "url": "https://pokeapi.co/api/v2/type/8/" }],
+        "no_damage_to": []
+      }
+    }
+  ]
+}

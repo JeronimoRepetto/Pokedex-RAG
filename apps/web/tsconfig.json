@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "ES2022"
-    ],
+    "target": "ES2023",
+    "lib": ["dom", "dom.iterable", "ES2023"],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
@@ -17,19 +13,14 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "types": [
-      "vitest/globals",
-      "@testing-library/jest-dom"
-    ],
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
     "plugins": [
       {
         "name": "next"
       }
     ],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     }
   },
   "include": [
@@ -39,9 +30,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "out",
-    ".next"
-  ]
+  "exclude": ["node_modules", "out", ".next"]
 }

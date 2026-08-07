@@ -10,6 +10,8 @@ import type {
   CompareResponse,
   EvolutionChainResponse,
   HealthResponse,
+  IntentResponse,
+  MatchupResponse,
   PokemonCard,
   PokemonListResponse,
   RAGResponse,
@@ -182,4 +184,13 @@ export function compare(question: string, providers?: string[]): Promise<Compare
   const body: Record<string, unknown> = { question };
   if (providers && providers.length > 0) body.providers = providers;
   return jsonPost<CompareResponse>('/compare', body);
+}
+
+export function classifyIntent(question: string): Promise<IntentResponse> {
+  return jsonPost<IntentResponse>('/intent', { question });
+}
+
+/** Deterministic Pokémon-vs-Pokémon head-to-head — no LLM behind it, so it's instant. */
+export function getMatchup(a: string, b: string): Promise<MatchupResponse> {
+  return jsonPost<MatchupResponse>('/matchup', { a, b });
 }

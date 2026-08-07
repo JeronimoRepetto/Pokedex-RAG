@@ -43,9 +43,78 @@ def drafts_by_type(builder: DocumentBuilder) -> dict[str, object]:
     return {d.doc_type: d for d in builder.build_for_pokemon(1)}
 
 
-def test_builds_all_four_document_types(session) -> None:
+def seed_type_chart(session) -> None:
+    """Minimal chart so the matchup document has something to say. Bulbasaur is
+    grass/poison in the fixture."""
+    from pokedex_db.models import Type, TypeEffectiveness
+
+    names = {1: "normal", 4: "poison", 3: "flying", 12: "grass", 11: "water", 10: "fire"}
+    for type_id, name in names.items():
+        session.merge(Type(id=type_id, name=name))
+    session.flush()
+    for attacking, defending, multiplier in [
+        (3, 12, 2.0),  # flying -> grass
+        (10, 12, 2.0),  # fire -> grass
+        (11, 12, 0.5),  # water -> grass
+        (12, 11, 2.0),  # grass -> water
+        (12, 12, 0.5),  # grass -> grass
+        (4, 12, 2.0),  # poison -> grass
+        (4, 4, 0.5),  # poison -> poison
+        # Deliberately NO flying->poison row: flying is neutral against poison in the
+        # real chart, which is exactly why Bulbasaur ends up 2x weak to flying rather
+        # than having it cancel out.
+    ]:
+        session.merge(
+            TypeEffectiveness(
+                attacking_type_id=attacking, defending_type_id=defending, multiplier=multiplier
+            )
+        )
+    session.commit()
+
+
+def test_builds_every_document_type(session) -> None:
+    """Without a type chart the matchup document is correctly absent — a database that
+    predates the Phase-8 migration must not produce an empty document."""
     drafts = drafts_by_type(DocumentBuilder(session))
     assert set(drafts) == {"card", "flavor", "moves", "evolution"}
+
+    seed_type_chart(session)
+
+    assert set(drafts_by_type(DocumentBuilder(session))) == {
+        "card",
+        "flavor",
+        "moves",
+        "evolution",
+        "matchup",
+    }
+
+
+def test_matchup_document_states_both_sides_and_the_chart_generation(session) -> None:
+    seed_type_chart(session)
+
+    matchup = drafts_by_type(DocumentBuilder(session))["matchup"]
+
+    assert matchup.title == "Bulbasaur (#1) — type matchups"
+    # Defensive: fire and flying each hit grass 2x and are neutral on poison, so they
+    # land at 2x — neither reaches 4x. Poison is 2x on grass but 0.5x on poison, so it
+    # cancels to neutral and must NOT appear.
+    assert "super effective (2x) against Bulbasaur: fire, flying" in matchup.content
+    assert "Attacks Bulbasaur resists (0.5x): grass, water" in matchup.content
+    # Offensive: its own grass attacks beat water.
+    assert "grass attacks are super effective against: water" in matchup.content
+    # The caveat has to live IN the document, or a model quoting it drops the caveat.
+    assert "Generation VI onward" in matchup.content
+
+
+def test_matchup_document_hash_is_stable_across_builds(session) -> None:
+    """The embed job skips unchanged content by hash; an unstable document would pay to
+    re-embed 151 documents on every build."""
+    seed_type_chart(session)
+
+    first = drafts_by_type(DocumentBuilder(session))["matchup"]
+    second = drafts_by_type(DocumentBuilder(session))["matchup"]
+
+    assert first.content_hash == second.content_hash
 
 
 def test_card_contains_verifiable_facts(session) -> None:

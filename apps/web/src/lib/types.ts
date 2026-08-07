@@ -136,3 +136,42 @@ export interface HealthResponse {
   status: string;
   dependencies: Record<string, { status: string; detail?: string }>;
 }
+
+export type IntentKind = 'card' | 'question' | 'compare';
+
+export interface IntentEntity {
+  id: number;
+  name: string;
+  matched_text: string;
+  match: 'exact' | 'fuzzy';
+  score: number;
+}
+
+export interface IntentResponse {
+  intent: IntentKind;
+  entities: IntentEntity[];
+  confidence: number;
+  method: 'deterministic' | 'llm' | 'fallback';
+  warnings: string[];
+}
+
+export interface MatchupSide {
+  name: string;
+  best_multiplier: number;
+  best_types: string[];
+  verdict: 'advantage' | 'disadvantage' | 'neutral';
+  weak_to: string[];
+  immune_to: string[];
+  stat_total: number;
+}
+
+export interface MatchupResponse {
+  a: PokemonCard;
+  b: PokemonCard;
+  a_side: MatchupSide;
+  b_side: MatchupSide;
+  type_advantage: 'a' | 'b' | 'none';
+  stat_advantage: 'a' | 'b' | 'none';
+  notes: string[];
+  disclaimer: string;
+}

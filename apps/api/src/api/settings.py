@@ -64,6 +64,17 @@ class ApiSettings(BaseAppSettings):
     # wildcard, which the guidelines forbid in production.
     cors_allowed_origins: str = ""
 
+    # Intent classification (Phase 8). Empty provider disables LLM escalation entirely:
+    # the deterministic rules then answer everything and ambiguity degrades to
+    # `question`. The fuzzy numbers are measured, not guessed: 0.80 keeps "pickachu"
+    # (0.933 vs pikachu) while dropping "pero"/"about"; the length guard plus the
+    # stopword list stop Spanish function words like "para" (0.889 vs paras!).
+    intent_provider: str = ""
+    intent_max_output_tokens: int = 128
+    intent_fuzzy_cutoff: float = 0.80
+    intent_min_fuzzy_length: int = 4
+    intent_max_entities: int = 4
+
     def parsed_api_keys(self) -> frozenset[str]:
         return frozenset(key.strip() for key in self.api_keys.split(",") if key.strip())
 

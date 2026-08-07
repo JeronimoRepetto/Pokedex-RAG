@@ -35,6 +35,14 @@ is touched.
   judged. The response echoes `context_document_ids` so the shared context is auditable.
   A provider that is also the judge is reported with `judge.independent = false`. One
   provider failing yields `status=provider_error` for that candidate only.
+- `POST /intent` — `{question}` → `{intent: card|question|compare, entities, method}`.
+  Deterministic bilingual rules first (fuzzy name matching handles misspellings like
+  "Pickachu"); an optional LLM classifier (`INTENT_PROVIDER`) handles the ambiguous
+  remainder. Cannot fail for a valid question: every failure degrades to `question`.
+- `POST /matchup` — `{a, b}` → both cards, per-side type analysis (weaknesses,
+  immunities, best offense both directions), stat totals and a type/stat advantage.
+  100% deterministic from the DB's type chart — no LLM, no `winner` field on purpose
+  (stats + a chart is not a battle simulator; the response says so).
 - `GET /docs`, `GET /openapi.json` — API documentation.
 
 Search requires the embeddings configuration (`GCP_PROJECT_ID`, `EMBEDDING_*` — see

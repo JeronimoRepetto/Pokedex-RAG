@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import './globals.css';
+import './pokedex.css';
 
 export const metadata: Metadata = {
   title: 'Pokédex AI — Multimodal RAG Lab',
@@ -13,14 +13,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <div className="layout">
-          <nav className="nav">
-            <Link href="/" className="nav-brand">
-              Pokédex AI
-            </Link>
-            <Link href="/">Search</Link>
-            <Link href="/chat/">Chat</Link>
-            <Link href="/compare/">Compare</Link>
-          </nav>
           <main>{children}</main>
           {/* The IP disclaimer is part of the layout, so it cannot be forgotten on a
               page — same rule the root README and the OpenAPI description follow. */}
@@ -29,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               Educational, non-commercial project. <strong>Not affiliated with</strong>,
               sponsored or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon
               Company. Pokémon names, characters and images belong to their respective owners.
+              The device design on this page is an original CSS interpretation.
             </p>
             <p>
               Data obtained via <a href="https://pokeapi.co/">PokéAPI</a>. Sprites are shown for

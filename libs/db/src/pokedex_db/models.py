@@ -15,6 +15,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -99,6 +100,26 @@ class PokemonType(Base):
     pokemon_id: Mapped[int] = mapped_column(ForeignKey("pokemon.id"), primary_key=True)
     slot: Mapped[int] = mapped_column(Integer, primary_key=True)
     type_id: Mapped[int] = mapped_column(ForeignKey("types.id"), index=True)
+
+
+class TypeEffectiveness(Base):
+    """How much damage one attacking type deals to one defending type.
+
+    ONLY non-neutral pairs are stored: a missing row means 1x. PokéAPI's
+    `damage_relations` lists exactly the non-neutral relations, so storing the
+    absences would mean inventing ~140 rows that carry no information — and the
+    "no row = neutral" rule then lives in one documented place (`multiplier_for`)
+    instead of being re-derived by every reader.
+    """
+
+    __tablename__ = "type_effectiveness"
+
+    attacking_type_id: Mapped[int] = mapped_column(ForeignKey("types.id"), primary_key=True)
+    defending_type_id: Mapped[int] = mapped_column(ForeignKey("types.id"), primary_key=True)
+    # 2.0 super effective | 0.5 not very effective | 0.0 immune. Float, not Numeric:
+    # these are exact binary fractions, so no precision is lost and arithmetic on
+    # dual-type combinations stays trivial.
+    multiplier: Mapped[float] = mapped_column(Float)
 
 
 class Ability(Base):
