@@ -28,7 +28,9 @@ from pokedex_db.models import (
     Species,
     Sprite,
     Type,
+    TypeEffectiveness,
 )
+from pokedex_db.typechart import DEFENSIVE_RELATIONS, OFFENSIVE_RELATIONS
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +293,44 @@ def normalize_ability(session: Session, payload: dict[str, Any]) -> None:
 
 
 def normalize_type(session: Session, payload: dict[str, Any]) -> None:
-    session.merge(Type(id=payload["id"], name=payload["name"]))
+    """Store the type AND its damage relations.
+
+    The relations were always present in the snapshot; until Phase 8 they were simply
+    discarded, which is why the corpus could not ground a type-matchup answer.
+
+    Only the attacking side (`*_to`) is imported — `*_from` is the same fact seen from
+    the other type's payload, and importing both would write every pair twice. Rows are
+    keyed by (attacking, defending) and merged, so re-normalizing converges.
+    """
+    type_id = payload["id"]
+    session.merge(Type(id=type_id, name=payload["name"]))
+    relations = payload.get("damage_relations") or {}
+    # `past_damage_relations` is also present (older generations' chart) and deliberately
+    # ignored: this corpus already carries MODERN typings and abilities, so a Gen-1 chart
+    # would leave holes for the Steel and Fairy types that Magnemite and Clefairy have.
+    pairs: list[tuple[int, int, float]] = []
+    for relation, multiplier in OFFENSIVE_RELATIONS.items():
+        for ref in relations.get(relation) or []:
+            # _stub_type resolves the id from the reference URL and creates the row if
+            # that type has not been normalized yet, so import does not depend on the
+            # order types arrive in — and Dark, which has no snapshot of its own because
+            # no Gen-1 Pokémon is Dark, still gets a row instead of an FK violation.
+            pairs.append((type_id, _stub_type(session, ref), multiplier))
+    for relation, multiplier in DEFENSIVE_RELATIONS.items():
+        for ref in relations.get(relation) or []:
+            pairs.append((_stub_type(session, ref), type_id, multiplier))
+    # The stub rows must exist before anything references them; merging the pairs first
+    # would let autoflush write a child ahead of its parent (the phase-1/phase-2 rule
+    # normalize_pokemon already documents).
+    session.flush()
+    for attacking_id, defending_id, multiplier in pairs:
+        session.merge(
+            TypeEffectiveness(
+                attacking_type_id=attacking_id,
+                defending_type_id=defending_id,
+                multiplier=multiplier,
+            )
+        )
 
 
 # Dependency-safe processing order for `pipeline normalize`.

@@ -90,7 +90,7 @@ Each component's README covers how to run, test and deploy it.
 | `apps/data-pipeline` | job | Ingest PokéAPI data, build documents, generate embeddings |
 | `apps/api` | service | Pokédex + search + RAG chat + provider comparison API |
 | `apps/evals` | job | Golden-dataset evaluation runner and report generator |
-| `apps/web` | frontend | Static Next.js UI over the public API (search, cards, chat, comparison) |
+| `apps/web` | frontend | The Pokédex device: single-screen static UI with intent routing over the public API |
 | `libs/*` | libraries | Shared config/logging/contracts, DB models, embedders, LLM gateway |
 
 To run the UI, start the API with this origin allowed and point the app at it:
@@ -111,6 +111,8 @@ cd apps/web && cp .env.example .env.local && pnpm install && pnpm dev    # http:
 | `GET /pokemon/{id}/sprite` | Serves a downloaded sprite file (the UI's only image source) |
 | `POST /chat` | Grounded answer with citations, validated and judged |
 | `POST /compare` | Same context, N providers, each judged side by side |
+| `POST /intent` | Classifies free text (card / question / compare) with fuzzy bilingual name resolution |
+| `POST /matchup` | Deterministic Pokémon-vs-Pokémon: stats, type chart maths, honest verdicts (no LLM) |
 
 ## Testing
 

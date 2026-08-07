@@ -7,6 +7,8 @@ import { vi } from 'vitest';
 import type {
   CompareResponse,
   EvolutionChainResponse,
+  IntentResponse,
+  MatchupResponse,
   PokemonCard,
   RAGResponse,
   SearchResponse,
@@ -123,6 +125,101 @@ export const COMPARISON: CompareResponse = {
       latency_ms: 599,
       prompt_tokens: 2000,
       output_tokens: 25,
+    },
+  ],
+};
+
+export const PIKACHU: PokemonCard = {
+  ...BULBASAUR,
+  id: 25,
+  name: 'pikachu',
+  types: [{ slot: 1, name: 'electric' }],
+  stats: { hp: 35, attack: 55, speed: 90 },
+  flavor_text: 'It stores electricity in its cheeks.',
+};
+
+export const INTENT_CARD: IntentResponse = {
+  intent: 'card',
+  entities: [{ id: 94, name: 'gengar', matched_text: 'gengar', match: 'exact', score: 1 }],
+  confidence: 0.9,
+  method: 'deterministic',
+  warnings: [],
+};
+
+export const INTENT_QUESTION: IntentResponse = {
+  intent: 'question',
+  entities: [],
+  confidence: 0.6,
+  method: 'deterministic',
+  warnings: [],
+};
+
+export const INTENT_VERSUS: IntentResponse = {
+  intent: 'compare',
+  entities: [
+    { id: 25, name: 'pikachu', matched_text: 'pickachu', match: 'fuzzy', score: 0.93 },
+    { id: 94, name: 'gengar', matched_text: 'gengar', match: 'exact', score: 1 },
+  ],
+  confidence: 0.95,
+  method: 'deterministic',
+  warnings: [],
+};
+
+export const MATCHUP: MatchupResponse = {
+  a: PIKACHU,
+  b: { ...BULBASAUR, id: 94, name: 'gengar', types: [{ slot: 1, name: 'ghost' }] },
+  a_side: {
+    name: 'pikachu',
+    best_multiplier: 1,
+    best_types: [],
+    verdict: 'neutral',
+    weak_to: ['ground'],
+    immune_to: [],
+    stat_total: 180,
+  },
+  b_side: {
+    name: 'gengar',
+    best_multiplier: 1,
+    best_types: [],
+    verdict: 'neutral',
+    weak_to: ['dark', 'ghost'],
+    immune_to: ['normal', 'fighting'],
+    stat_total: 500,
+  },
+  type_advantage: 'none',
+  stat_advantage: 'b',
+  notes: ['Pikachu has no type advantage over Gengar (1x at best).'],
+  disclaimer: 'Type and base-stat comparison only — not a battle simulation.',
+};
+
+/** IMAGE_MATCHES deliberately repeats pokemon_id 1 so dedupe is exercised. */
+export const IMAGE_MATCHES: SearchResponse = {
+  mode: 'image',
+  space: 'gemini-embedding-2-768-v1',
+  results: [
+    {
+      document_id: 11,
+      pokemon_id: 1,
+      pokemon_name: 'bulbasaur',
+      doc_type: 'sprite',
+      title: 'bulbasaur — default sprite',
+      score: 0.99,
+    },
+    {
+      document_id: 12,
+      pokemon_id: 1,
+      pokemon_name: 'bulbasaur',
+      doc_type: 'sprite',
+      title: 'bulbasaur — shiny sprite',
+      score: 0.91,
+    },
+    {
+      document_id: 13,
+      pokemon_id: 25,
+      pokemon_name: 'pikachu',
+      doc_type: 'sprite',
+      title: 'pikachu — default sprite',
+      score: 0.85,
     },
   ],
 };

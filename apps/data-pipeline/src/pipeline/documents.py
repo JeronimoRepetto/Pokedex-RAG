@@ -28,6 +28,7 @@ from pokedex_db.models import (
     Species,
     Type,
 )
+from pokedex_db.typechart import defensive_profile, load_chart, multiplier_for
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,7 @@ class DocumentBuilder:
             self._flavor(pokemon, species),
             self._moves(pokemon),
             self._evolution(pokemon, species),
+            self._matchups(pokemon),
         ]
         return [d for d in drafts if d is not None]
 
@@ -177,6 +179,74 @@ class DocumentBuilder:
             title=f"{name} (#{pokemon.id}) — Pokédex card",
             content="\n".join(lines),
             source_refs=self._refs(pokemon, species),
+        )
+
+    def _matchups(self, pokemon: Pokemon) -> DocumentDraft | None:
+        """Type effectiveness, written out so the RAG can CITE it.
+
+        Before this document existed, "what is Bulbasaur strong against?" could only be
+        answered from the model's own knowledge — which the groundedness judge correctly
+        flagged as unsupported (Phase 6.2). Returns None when the chart has not been
+        normalized yet, so a stale database yields no document rather than an empty one.
+        """
+        chart, all_types = load_chart(self._session)
+        if not chart:
+            return None
+        types = self._type_names(pokemon.id)
+        if not types:
+            return None
+        name = _display(pokemon.name)
+        profile = defensive_profile(chart, types, all_types)
+
+        def listed(values: tuple[str, ...]) -> str:
+            return ", ".join(values) if values else "none"
+
+        lines = [
+            f"{name} is a {'/'.join(types)} type Pokémon.",
+            f"Attacks that are 4x super effective against {name}: {listed(profile.quad_weak)}.",
+            f"Attacks that are super effective (2x) against {name}: {listed(profile.weak)}.",
+            f"Attacks {name} resists (0.5x): {listed(profile.resists)}.",
+            f"Attacks {name} strongly resists (0.25x): {listed(profile.quad_resists)}.",
+            f"Attacks {name} is immune to: {listed(profile.immune)}.",
+        ]
+        # Offensive side: what this Pokémon's OWN types are good against.
+        for attacking in types:
+            strong = tuple(
+                sorted(
+                    defending
+                    for defending in all_types
+                    if multiplier_for(chart, attacking, defending) > 1.0
+                )
+            )
+            weak = tuple(
+                sorted(
+                    defending
+                    for defending in all_types
+                    if 0.0 < multiplier_for(chart, attacking, defending) < 1.0
+                )
+            )
+            immune = tuple(
+                sorted(
+                    defending
+                    for defending in all_types
+                    if multiplier_for(chart, attacking, defending) == 0.0
+                )
+            )
+            lines.append(
+                f"{name}'s {attacking} attacks are super effective against: {listed(strong)}."
+            )
+            lines.append(f"{name}'s {attacking} attacks are resisted by: {listed(weak)}.")
+            if immune:
+                lines.append(f"{name}'s {attacking} attacks do not affect: {listed(immune)}.")
+        # Stated in the document so a model quoting it inherits the caveat instead of
+        # implying these numbers are the Generation-I chart the Gen-1 roster suggests.
+        lines.append("Type matchups follow the current (Generation VI onward) type chart.")
+        return DocumentDraft(
+            doc_type="matchup",
+            pokemon_id=pokemon.id,
+            title=f"{name} (#{pokemon.id}) — type matchups",
+            content="\n".join(lines),
+            source_refs={"pokeapi": [f"https://pokeapi.co/api/v2/pokemon/{pokemon.id}/"]},
         )
 
     def _flavor(self, pokemon: Pokemon, species: Species) -> DocumentDraft | None:

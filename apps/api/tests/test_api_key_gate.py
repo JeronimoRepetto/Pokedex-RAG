@@ -82,6 +82,8 @@ def test_health_stays_public_behind_the_gate(tmp_path) -> None:
         ("post", "/search/text", {"query": "bulbasaur"}),
         ("post", "/chat", {"question": "what type is bulbasaur?"}),
         ("post", "/compare", {"question": "what type is bulbasaur?"}),
+        ("post", "/intent", {"question": "what type is bulbasaur?"}),
+        ("post", "/matchup", {"a": "bulbasaur", "b": "squirtle"}),
         ("get", "/openapi.json", None),
     ],
 )

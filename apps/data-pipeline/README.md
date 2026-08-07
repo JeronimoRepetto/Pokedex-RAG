@@ -17,7 +17,12 @@ pipeline status            # row counts for known tables
 ```
 
 `embed --space` targets exactly one configured space per run; `--sprites` is rejected
-for text-only spaces. The local space needs the optional dependency group first:
+for text-only spaces.
+
+Since Phase 8, `ingest` also normalizes each type's `damage_relations` into the
+`type_effectiveness` table (the data was always in the snapshots; it used to be
+discarded), and `build-docs` emits a fifth per-Pokémon document type, `matchup`, from
+that chart — which is what lets the RAG cite type weaknesses instead of abstaining. The local space needs the optional dependency group first:
 `poetry install --with local` (sentence-transformers, pulls torch), plus a Hugging
 Face login with the model's license accepted.
 

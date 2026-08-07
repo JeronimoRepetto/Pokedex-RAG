@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.health import router as health_router
+from api.intent import IntentService, LLMIntentClassifier
+from api.intent.names import SqlPokemonNameLookup
+from api.matchup import MatchupService, SqlChartLookup
 from api.middleware import ApiKeyMiddleware, RequestIdMiddleware
 from api.rag.compare import CompareService
 from api.rag.graph import RagDeps, build_graph
@@ -12,6 +15,8 @@ from api.rag.validation import SqlPokemonTypeLookup
 from api.repositories import SqlPokemonRepository
 from api.routers.chat import router as chat_router
 from api.routers.compare import router as compare_router
+from api.routers.intent import router as intent_router
+from api.routers.matchup import router as matchup_router
 from api.routers.pokemon import router as pokemon_router
 from api.routers.search import router as search_router
 from api.search import SearchService, SqlSearchRepository
@@ -210,6 +215,33 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         judge_provider=settings.judge_provider or None,
     )
 
+    # Intent classification (Phase 8): deterministic rules always; the LLM escalation
+    # only exists when a provider is configured, and it must be a registered one.
+    intent_classifier = None
+    if settings.intent_provider:
+        if settings.intent_provider not in provider_registry.known_providers():
+            raise ValueError(
+                f"intent_provider={settings.intent_provider!r} is not a registered provider; "
+                f"known: {provider_registry.known_providers()}"
+            )
+        intent_classifier = LLMIntentClassifier(
+            _LazyGateway(lambda: provider_registry.build(settings.intent_provider)),
+            max_output_tokens=settings.intent_max_output_tokens,
+        )
+    app.state.intent_service = IntentService(
+        SqlPokemonNameLookup(app.state.session_factory),
+        intent_classifier,
+        fuzzy_cutoff=settings.intent_fuzzy_cutoff,
+        min_fuzzy_length=settings.intent_min_fuzzy_length,
+        max_entities=settings.intent_max_entities,
+    )
+
+    # Pokémon-vs-Pokémon matchup (Phase 8): fully deterministic, reuses the read
+    # repository and the shared type chart.
+    app.state.matchup_service = MatchupService(
+        app.state.repository, SqlChartLookup(app.state.session_factory)
+    )
+
     # Order matters: middleware added last runs first. CORS must be outermost so even
     # a 401 from the API-key gate carries the CORS headers a browser needs to read it;
     # the request id is generated before the gate so a rejection stays traceable.
@@ -231,6 +263,8 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     app.include_router(search_router)
     app.include_router(chat_router)
     app.include_router(compare_router)
+    app.include_router(intent_router)
+    app.include_router(matchup_router)
     return app
 
 
