@@ -75,6 +75,19 @@ class ApiSettings(BaseAppSettings):
     intent_min_fuzzy_length: int = 4
     intent_max_entities: int = 4
 
+    # --- Public-deployment controls (Phase 9) ---------------------------------------
+    # Pause switch: while true every route except /health returns 503, so no model can
+    # be called whatever a caller sends. Flip it with one `gcloud run services update`.
+    service_paused: bool = False
+    # Shown in the paused message so a visitor knows who to ask. Keep it non-personal.
+    service_contact: str = ""
+    # Daily ceiling on PAID LLM calls, counted inside the gateway (one /compare can be
+    # up to 9 of them). 0 disables the ceiling — correct locally, never in a deployment.
+    daily_llm_call_limit: int = 0
+    # Daily cap per caller on /chat and /compare, so one abuser cannot eat the global
+    # allowance alone. 0 disables it.
+    per_caller_daily_limit: int = 0
+
     def parsed_api_keys(self) -> frozenset[str]:
         return frozenset(key.strip() for key in self.api_keys.split(",") if key.strip())
 

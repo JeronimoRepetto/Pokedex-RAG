@@ -21,7 +21,16 @@ def check_database(engine) -> dict[str, str]:
 def health(request: Request) -> JSONResponse:
     dependencies = {"database": check_database(request.app.state.engine)}
     healthy = all(dep["status"] == "ok" for dep in dependencies.values())
+    settings = request.app.state.settings
     return JSONResponse(
         status_code=200 if healthy else 503,
-        content={"status": "ok" if healthy else "degraded", "dependencies": dependencies},
+        content={
+            "status": "ok" if healthy else "degraded",
+            # Reported here because /health is the one route that keeps answering while
+            # paused — it is how a client tells "switched off on purpose" apart from
+            # "unreachable", which deserve very different messages.
+            "paused": bool(settings.service_paused),
+            "contact": settings.service_contact,
+            "dependencies": dependencies,
+        },
     )

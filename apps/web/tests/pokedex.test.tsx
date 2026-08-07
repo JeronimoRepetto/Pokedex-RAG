@@ -220,3 +220,55 @@ describe('deep links and failure display', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 });
+
+describe('paused service', () => {
+  const HEALTH_PAUSED = {
+    status: 'ok',
+    paused: true,
+    contact: 'demo@example.com',
+    dependencies: { database: { status: 'ok' } },
+  };
+
+  it('shows the bilingual notice and disables the controls', async () => {
+    fakeFetch([{ match: (url) => url.includes('/health'), body: HEALTH_PAUSED }]);
+
+    render(<PokedexApp />);
+
+    expect(await screen.findByText(/Servicio pausado/)).toBeInTheDocument();
+    expect(screen.getByText(/Service paused/)).toBeInTheDocument();
+    expect(screen.getAllByText(/demo@example.com/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Imagen…' })).toBeDisabled();
+  });
+
+  it('stays usable when the service is running', async () => {
+    fakeFetch([
+      {
+        match: (url) => url.includes('/health'),
+        body: { ...HEALTH_PAUSED, paused: false, contact: '' },
+      },
+    ]);
+
+    render(<PokedexApp />);
+
+    await waitFor(() => expect(screen.queryByText(/Servicio pausado/)).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Ask the Pokédex')).toBeInTheDocument();
+  });
+
+  it('an unreachable API is NOT reported as paused', async () => {
+    // Being switched off on purpose and being broken are different facts; guessing
+    // would tell the visitor the wrong thing.
+    fakeFetch([
+      {
+        match: () => {
+          throw new TypeError('Failed to fetch');
+        },
+        body: null,
+      },
+    ]);
+
+    render(<PokedexApp />);
+
+    await waitFor(() => expect(screen.queryByText(/Servicio pausado/)).not.toBeInTheDocument());
+  });
+});

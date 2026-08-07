@@ -134,6 +134,10 @@ export interface CompareResponse {
 
 export interface HealthResponse {
   status: string;
+  /** True when the owner switched the demo off on purpose (Phase 9). Distinct from an
+      unreachable API: they get different messages. */
+  paused: boolean;
+  contact: string;
   dependencies: Record<string, { status: string; detail?: string }>;
 }
 

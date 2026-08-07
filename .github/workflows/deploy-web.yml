@@ -1,0 +1,78 @@
+name: Deploy web
+
+# The static export goes to GitHub Pages. Everything the site needs at runtime is baked
+# in at build time (NEXT_PUBLIC_*), so a change of API URL means a rebuild — which is
+# why workflow_dispatch is here alongside the push trigger.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; let a newer commit supersede an in-flight one, but do not
+# cancel a deployment half-way through publishing.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the static export
+        env:
+          # A project site lives under /<repo>/, so the base path is the repository name.
+          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+          # Repository variables, not secrets: NEXT_PUBLIC_* values are compiled into the
+          # bundle and readable by anyone, so storing them as secrets would only pretend
+          # they are private. The API's real protections are its quota and pause switch.
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_API_KEY: ${{ vars.NEXT_PUBLIC_API_KEY }}
+          NEXT_PUBLIC_POKEDEX_MAX_ID: ${{ vars.NEXT_PUBLIC_POKEDEX_MAX_ID || '151' }}
+        run: pnpm build
+
+      - name: Fail if the export lost its assets
+        # Cheap guard against the classic Pages failure: no .nojekyll means the `_next`
+        # directory is dropped and the site loads with no JavaScript at all.
+        run: test -f out/.nojekyll && test -d out/_next
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

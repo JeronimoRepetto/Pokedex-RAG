@@ -1,0 +1,4 @@
+GitHub Pages runs Jekyll by default, and Jekyll ignores directories whose name starts
+with an underscore. Next.js puts every script and stylesheet in `_next/`, so without
+this file the deployed site loads as unstyled HTML with no JavaScript at all — a total,
+silent failure. The file's contents are irrelevant; only its presence matters.

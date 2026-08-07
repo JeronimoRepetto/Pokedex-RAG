@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { ProviderComparison } from '@/components/ProviderComparison';
+import { PausedNotice } from '@/components/pokedex/PausedNotice';
 import { Screen } from '@/components/pokedex/Screen';
 import { selectProviderComparison, statusLine } from '@/lib/pokedexMachine';
 import { usePokedex } from '@/lib/usePokedex';
@@ -14,12 +15,13 @@ const ACCEPTED = 'image/png,image/jpeg,image/webp';
  * interpretation (no franchise art asset; see the IP policy).
  */
 export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
-  const { state, actions } = usePokedex(deepLink);
+  const { state, actions, paused } = usePokedex(deepLink);
   const pickerRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
   const providerComparison = selectProviderComparison(state);
   const busy = state.activity.kind === 'busy';
+  const isPaused = paused?.paused === true;
 
   // The d-pad's vertical buttons page the screen's content. `scrollBy` is optional-
   // chained because jsdom doesn't implement it; smoothness comes from the CSS
@@ -56,8 +58,14 @@ export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
           </div>
           <div className="screen-bezel">
             <div className="screen">
-              <output className="screen-status mono">{statusLine(state)}</output>
-              <Screen state={state} actions={actions} contentRef={screenRef} />
+              <output className="screen-status mono">
+                {isPaused ? 'PAUSED · PAUSADO' : statusLine(state)}
+              </output>
+              {isPaused ? (
+                <PausedNotice contact={paused?.contact ?? ''} />
+              ) : (
+                <Screen state={state} actions={actions} contentRef={screenRef} />
+              )}
             </div>
             <div className="speaker" aria-hidden="true" />
           </div>
@@ -168,7 +176,9 @@ export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
               <button
                 type="submit"
                 disabled={
-                  busy || (state.input.trim().length < 3 && !/^\d+$/.test(state.input.trim()))
+                  isPaused ||
+                  busy ||
+                  (state.input.trim().length < 3 && !/^\d+$/.test(state.input.trim()))
                 }
               >
                 {busy ? 'Procesando…' : 'Enviar'}
@@ -176,7 +186,7 @@ export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
               <button
                 type="button"
                 className="secondary"
-                disabled={busy}
+                disabled={isPaused || busy}
                 onClick={() => pickerRef.current?.click()}
               >
                 Imagen…
@@ -184,7 +194,7 @@ export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
               <button
                 type="button"
                 className="secondary camera-button"
-                disabled={busy}
+                disabled={isPaused || busy}
                 onClick={() => cameraRef.current?.click()}
               >
                 Cámara

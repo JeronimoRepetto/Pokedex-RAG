@@ -5,7 +5,13 @@ from api.health import router as health_router
 from api.intent import IntentService, LLMIntentClassifier
 from api.intent.names import SqlPokemonNameLookup
 from api.matchup import MatchupService, SqlChartLookup
-from api.middleware import ApiKeyMiddleware, RequestIdMiddleware
+from api.middleware import (
+    ApiKeyMiddleware,
+    PaidRouteLimitMiddleware,
+    PausedMiddleware,
+    RequestIdMiddleware,
+)
+from api.quota import QuotaExceededError, QuotaGateway, UsageCounter
 from api.rag.compare import CompareService
 from api.rag.graph import RagDeps, build_graph
 from api.rag.judge import LLMJudge
@@ -157,9 +163,19 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             model=settings.ai_studio_model,
         )
 
+    # Every paid call in the system goes through a registered provider, so wrapping the
+    # factories is the one choke point a daily ceiling can be enforced at — a check on
+    # the routers would miss judge calls, reformulate retries and /intent escalation,
+    # and would silently miss whatever is added next.
+    usage_counter = UsageCounter(app.state.session_factory)
+    app.state.usage_counter = usage_counter
+
+    def metered(factory):
+        return lambda: QuotaGateway(factory(), usage_counter, settings.daily_llm_call_limit)
+
     provider_registry = ProviderRegistry()
-    provider_registry.register("vertex-gemini", gateway_factory)
-    provider_registry.register("ai-studio-gemini", ai_studio_gateway_factory)
+    provider_registry.register("vertex-gemini", metered(gateway_factory))
+    provider_registry.register("ai-studio-gemini", metered(ai_studio_gateway_factory))
     # llm_fallback is optional (blank until a second provider is registered, Phase 4.2).
     for setting_name, provider_name, required in [
         ("llm_primary", settings.llm_primary, True),
@@ -242,10 +258,38 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         app.state.repository, SqlChartLookup(app.state.session_factory)
     )
 
-    # Order matters: middleware added last runs first. CORS must be outermost so even
-    # a 401 from the API-key gate carries the CORS headers a browser needs to read it;
-    # the request id is generated before the gate so a rejection stays traceable.
+    # Registered once for the whole app rather than per router: the ceiling lives in the
+    # gateway, so it can surface from anywhere that generates — /chat, /compare, and
+    # whatever is added next — and every one of them must answer 429, never 500.
+    @app.exception_handler(QuotaExceededError)
+    async def _quota_exceeded(_request, exc: QuotaExceededError):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=429,
+            content={"detail": exc.detail_en, "detail_es": exc.detail_es},
+        )
+
+    # Order matters: middleware added last runs first, so the execution order here is
+    # CORS -> RequestId -> Paused -> ApiKey -> PaidRouteLimit -> routers.
+    #   - CORS outermost, so even a 503/429 carries the headers a browser needs to READ
+    #     the refusal instead of reporting an opaque network error;
+    #   - the request id exists before anything can reject, so every rejection is
+    #     traceable;
+    #   - Paused before the key gate: a paused demo should say so rather than demand
+    #     credentials for a service that is switched off;
+    #   - the per-caller limit sits closest to the routers, where the path is known.
+    app.add_middleware(
+        PaidRouteLimitMiddleware,
+        counter=usage_counter,
+        per_caller_limit=settings.per_caller_daily_limit,
+    )
     app.add_middleware(ApiKeyMiddleware, api_keys=settings.parsed_api_keys())
+    app.add_middleware(
+        PausedMiddleware,
+        paused=settings.service_paused,
+        contact=settings.service_contact,
+    )
     app.add_middleware(RequestIdMiddleware)
     cors_origins = settings.parsed_cors_origins()
     if cors_origins:

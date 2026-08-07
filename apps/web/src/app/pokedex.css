@@ -569,3 +569,17 @@ fieldset.dpad {
   margin: 0;
   padding: 0;
 }
+
+/* ---- paused notice --------------------------------------------------------------- */
+
+.paused-notice hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.9rem 0;
+}
+
+.paused-heading {
+  font-weight: 700;
+  color: var(--warn);
+  margin: 0 0 0.3rem;
+}
