@@ -6,7 +6,7 @@ row stays traceable to its snapshot. Measurements keep PokéAPI units: height in
 decimetres, weight in hectograms.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
@@ -14,6 +14,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -314,6 +315,25 @@ class EvalResult(Base):
     retrieved_ids: Mapped[list] = mapped_column(JSONVariant, default=list)
     metrics: Mapped[dict[str, Any]] = mapped_column(JSONVariant, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ApiUsage(Base):
+    """Daily counters that bound what a public deployment can spend.
+
+    Deliberately NOT derived from `rag_answers`: that table misses judge calls,
+    reformulate retries, /intent escalation and every embedding, while adding rows for
+    /chat requests where no model ran. This one is incremented at the single place a
+    paid call actually happens.
+
+    `bucket` is either the global `llm` counter or `ip:<sha256 prefix>` — the address
+    itself is never stored, so the table holds no personal data.
+    """
+
+    __tablename__ = "api_usage"
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    bucket: Mapped[str] = mapped_column(String(80), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Sprite(Base):

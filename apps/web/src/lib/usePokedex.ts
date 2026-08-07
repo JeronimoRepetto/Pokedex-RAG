@@ -6,8 +6,16 @@
  * stale responses (two fast submissions cannot land out of order).
  */
 
-import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { chat, classifyIntent, compare, getMatchup, getPokemon, searchImage } from './api';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import {
+  chat,
+  classifyIntent,
+  compare,
+  getHealth,
+  getMatchup,
+  getPokemon,
+  searchImage,
+} from './api';
 import { prepareImage, validateImage } from './image';
 import {
   initialState,
@@ -50,6 +58,10 @@ async function resolveIntent(question: string): Promise<IntentResponse> {
 
 export function usePokedex(deepLink?: { card?: string }) {
   const [state, dispatch] = useReducer(reducer, deepLink, initialState);
+  // `null` = not asked yet. /health is the only route that answers while the service is
+  // paused, which is exactly what makes it the right probe: it distinguishes "switched
+  // off on purpose" from "unreachable", and those deserve different messages.
+  const [paused, setPaused] = useState<{ paused: boolean; contact: string } | null>(null);
   const stateRef = useRef<PokedexState>(state);
   stateRef.current = state;
   // seq lives in a ref and is incremented SYNCHRONOUSLY: two begins in the same tick
@@ -180,6 +192,23 @@ export function usePokedex(deepLink?: { card?: string }) {
     };
   }, [screen]);
 
+  // Ask once whether the demo is switched off. A failure here is NOT treated as
+  // paused: an unreachable API is a different problem with a different message, and
+  // guessing would tell the visitor the wrong thing.
+  useEffect(() => {
+    let cancelled = false;
+    getHealth()
+      .then((health) => {
+        if (!cancelled) setPaused({ paused: health.paused, contact: health.contact });
+      })
+      .catch(() => {
+        if (!cancelled) setPaused({ paused: false, contact: '' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Deep link: /pokemon/25/ starts on that card and loads it on mount.
   useEffect(() => {
     if (deepLink?.card) void loadCard(deepLink.card);
@@ -196,5 +225,5 @@ export function usePokedex(deepLink?: { card?: string }) {
     showCard: (ref) => void loadCard(ref),
     step: (delta) => dispatch({ type: 'STEP', delta }),
   };
-  return { state, actions };
+  return { state, actions, paused };
 }
