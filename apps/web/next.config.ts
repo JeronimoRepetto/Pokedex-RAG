@@ -10,6 +10,10 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   output: 'export',
   reactStrictMode: true,
+  // The floating "N" button in the corner is Next's dev-tools indicator. It never
+  // ships in a production build, but it also has no business on top of the device
+  // while developing — off.
+  devIndicators: false,
   // next/image's optimizer needs a server; static export has none. Sprites are already
   // small PNGs served by the API with a cache header, so plain <img> is the honest
   // choice here rather than shipping an optimizer that cannot run.

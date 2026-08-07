@@ -17,8 +17,17 @@ export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
   const { state, actions } = usePokedex(deepLink);
   const pickerRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const screenRef = useRef<HTMLDivElement>(null);
   const providerComparison = selectProviderComparison(state);
   const busy = state.activity.kind === 'busy';
+
+  // The d-pad's vertical buttons page the screen's content. `scrollBy` is optional-
+  // chained because jsdom doesn't implement it; smoothness comes from the CSS
+  // scroll-behavior rule, which reduced-motion users don't get.
+  function scrollScreen(direction: 1 | -1) {
+    const content = screenRef.current;
+    content?.scrollBy?.({ top: direction * Math.round(content.clientHeight * 0.7) });
+  }
 
   function acceptFile(file: File | undefined) {
     // Validation lives in usePokedex.submitImage so the rejection flows through the
@@ -35,7 +44,7 @@ export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
 
   return (
     <>
-      <h1 className="visually-hidden">Pokédex AI</h1>
+      <h1 className="stage-title">Pokédex-RAG</h1>
       <div className={`pokedex panel-${state.panel}`}>
         {/* ---- left half: display ---- */}
         <section className="pokedex-left" aria-label="Display panel" data-panel="left">
@@ -48,14 +57,24 @@ export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
           <div className="screen-bezel">
             <div className="screen">
               <output className="screen-status mono">{statusLine(state)}</output>
-              <Screen state={state} actions={actions} />
+              <Screen state={state} actions={actions} contentRef={screenRef} />
             </div>
             <div className="speaker" aria-hidden="true" />
           </div>
           <div className="left-controls">
             <span className="round-button" aria-hidden="true" />
             <fieldset className="dpad">
-              <legend className="visually-hidden">Browse image matches</legend>
+              <legend className="visually-hidden">
+                Browse matches (left/right) and scroll the screen (up/down)
+              </legend>
+              <button
+                type="button"
+                className="dpad-button dpad-up"
+                aria-label="Scroll the screen up"
+                onClick={() => scrollScreen(-1)}
+              >
+                <span aria-hidden="true">▲</span>
+              </button>
               <button
                 type="button"
                 className="dpad-button dpad-left"
@@ -74,6 +93,14 @@ export function PokedexApp({ deepLink }: { deepLink?: { card?: string } }) {
                 onClick={() => actions.step(1)}
               >
                 <span aria-hidden="true">▶</span>
+              </button>
+              <button
+                type="button"
+                className="dpad-button dpad-down"
+                aria-label="Scroll the screen down"
+                onClick={() => scrollScreen(1)}
+              >
+                <span aria-hidden="true">▼</span>
               </button>
             </fieldset>
           </div>
