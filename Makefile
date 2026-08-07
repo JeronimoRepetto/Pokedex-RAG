@@ -92,3 +92,28 @@ web-build:
 
 # Everything: Python components plus the web app.
 check: lint test web-lint web-test
+
+# --- cloud demo switch ---------------------------------------------------------------
+#
+# The deployed API idles at $0 (Cloud Run min-instances=0, Neon scale-to-zero). These
+# flip the PAUSE switch, which is about bots, not idling: while paused no route handler
+# runs, so nothing can spend. Either takes ~15 seconds.
+
+CLOUD_PROJECT := pokedex-rag-504617
+CLOUD_REGION  := europe-west1
+
+.PHONY: cloud-on cloud-off cloud-status
+
+cloud-on:
+	gcloud run services update pokedex-api --project=$(CLOUD_PROJECT) --region=$(CLOUD_REGION) \
+		--update-env-vars SERVICE_PAUSED=false
+	@echo "Demo ON: https://jeronimorepetto.github.io/Pokedex-RAG/"
+
+cloud-off:
+	gcloud run services update pokedex-api --project=$(CLOUD_PROJECT) --region=$(CLOUD_REGION) \
+		--update-env-vars SERVICE_PAUSED=true
+	@echo "Demo OFF: nothing can spend until cloud-on."
+
+cloud-status:
+	@curl -s https://pokedex-api-833646162998.$(CLOUD_REGION).run.app/health
+	@echo ""
