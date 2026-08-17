@@ -1,5 +1,4 @@
 # --- local-only: never pushed to GitHub (docs privacy policy) ---
-docs/
 CLAUDE.md
 .claude/
 .codegraph/
